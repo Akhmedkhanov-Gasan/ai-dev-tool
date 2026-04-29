@@ -1,0 +1,262 @@
+import requests
+import shutil
+import ast
+import subprocess
+import os
+import difflib
+
+
+APP_FILE_PATH = "demo_app/main.py"
+TEST_FILE_PATH = "demo_app/test_main.py"
+BACKUP_PATHS = {
+    APP_FILE_PATH: "demo_app/backups/main.py.bak",
+    TEST_FILE_PATH: "demo_app/backups/test_main.py.bak",
+}
+MODEL = "qwen2.5-coder"
+
+MAX_ITERATIONS = 3
+
+def read_file(path: str) -> str:
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+def write_file(path: str, code: str):
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(code)
+
+
+def read_project_files() -> dict[str, str]:
+    return {
+        APP_FILE_PATH: read_file(APP_FILE_PATH),
+        TEST_FILE_PATH: read_file(TEST_FILE_PATH),
+    }
+
+
+def write_project_files(files: dict[str, str]):
+    for path, code in files.items():
+        write_file(path, code)
+
+
+def parse_generated_files(text: str) -> dict[str, str]:
+    files = {}
+    current_path = None
+    current_lines = []
+
+    for line in text.splitlines():
+        if line.strip().startswith("```"):
+            continue
+
+        if line.startswith("=== ") and line.endswith(" ==="):
+            if current_path is not None:
+                files[current_path] = "\n".join(current_lines).strip() + "\n"
+
+            current_path = line.removeprefix("=== ").removesuffix(" ===").strip()
+            current_lines = []
+        elif current_path is not None:
+            current_lines.append(line)
+
+    if current_path is not None:
+        files[current_path] = "\n".join(current_lines).strip() + "\n"
+
+    required_paths = {APP_FILE_PATH, TEST_FILE_PATH}
+    missing_paths = required_paths - set(files)
+    extra_paths = set(files) - required_paths
+
+    if missing_paths:
+        raise ValueError(f"Missing files in model response: {sorted(missing_paths)}")
+
+    if extra_paths:
+        raise ValueError(f"Unexpected files in model response: {sorted(extra_paths)}")
+
+    return files
+
+
+def show_diff(path: str, old_code: str, new_code: str):
+    diff = difflib.unified_diff(
+        old_code.splitlines(),
+        new_code.splitlines(),
+        fromfile=path,
+        tofile=f"{path} updated",
+        lineterm=""
+    )
+
+    print(f"\n--- DIFF: {path} ---")
+    print("\n".join(diff))
+
+
+def show_project_diff(old_files: dict[str, str], new_files: dict[str, str]):
+    for path, old_code in old_files.items():
+        show_diff(path, old_code, new_files[path])
+
+
+def print_command_output(name: str, result: subprocess.CompletedProcess):
+    print(f"\n--- {name.upper()} OUTPUT ---")
+
+    output = result.stdout.strip()
+    error = result.stderr.strip()
+
+    if output:
+        print(output)
+
+    if error:
+        print(error)
+
+    if not output and not error:
+        print("No output")
+
+
+def generate_code(task, files, error_context):
+    file_context = "\n\n".join(
+        f"=== {path} ===\n{code}"
+        for path, code in files.items()
+    )
+
+    prompt = f"""
+You are a senior Python developer.
+
+Modify the FastAPI app and its tests according to the task.
+
+Return ONLY the full updated files in this exact format:
+
+=== demo_app/main.py ===
+<full updated app file>
+
+=== demo_app/test_main.py ===
+<full updated test file>
+
+Do NOT use markdown.
+Always add or update tests for the feature you implement.
+Keep existing tests unless the task explicitly requires changing behavior.
+
+Task:
+{task}
+
+Previous errors:
+{error_context}
+
+Files:
+{file_context}
+"""
+
+    response = requests.post(
+        "http://localhost:11434/api/generate",
+        json={
+            "model": MODEL,
+            "prompt": prompt,
+            "stream": False
+        }
+    )
+
+    return parse_generated_files(response.json()["response"])
+
+def check_code(files):
+    # syntax check
+    for path, code in files.items():
+        try:
+            ast.parse(code)
+        except Exception as e:
+            return False, f"Syntax error in {path}:\n{e}"
+
+    write_project_files(files)
+
+    venv_python = os.path.abspath(".venv/Scripts/python.exe")
+
+    # ruff
+    ruff_result = subprocess.run(
+        [venv_python, "-m", "ruff", "check", "demo_app"],
+        capture_output=True,
+        text=True
+    )
+
+    if ruff_result.returncode == 0:
+        print("RUFF: passed")
+    else:
+        print_command_output("ruff", ruff_result)
+        return False, f"Ruff error:\n{ruff_result.stdout}\n{ruff_result.stderr}"
+
+    # pytest
+    pytest_result = subprocess.run(
+        [venv_python, "-m", "pytest", "-v", "demo_app"],
+        capture_output=True,
+        text=True
+    )
+
+    if pytest_result.returncode == 0:
+        passed_count = pytest_result.stdout.count(" PASSED")
+        print(f"PYTEST: passed, {passed_count} tests")
+    else:
+        print_command_output("pytest", pytest_result)
+        return False, f"Pytest error:\n{pytest_result.stdout}\n{pytest_result.stderr}"
+
+
+    result = subprocess.run(
+        [venv_python, "-c", "import demo_app.main"],
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        return False, f"Runtime error:\n{result.stderr}"
+
+    return True, ""
+
+
+def run_agent(task):
+    for source_path, backup_path in BACKUP_PATHS.items():
+        os.makedirs(os.path.dirname(backup_path), exist_ok=True)
+        shutil.copy(source_path, backup_path)
+
+    original_files = read_project_files()
+    files = original_files
+    error_context = ""
+
+    for i in range(MAX_ITERATIONS):
+        print(f"\n--- ITERATION {i+1} ---")
+
+        try:
+            new_files = generate_code(task, files, error_context)
+        except Exception as e:
+            error_context = f"Model response parse error:\n{e}"
+            print("FAILED:")
+            print(error_context)
+            continue
+
+        ok, error = check_code(new_files)
+
+        if ok:
+            write_project_files(original_files)
+
+            show_project_diff(original_files, new_files)
+
+            answer = input("\nApply changes? [y/N]: ").strip().lower()
+
+            if answer != "y":
+                print("Changes rejected")
+                return
+
+            write_project_files(new_files)
+
+            print("SUCCESS: Code updated")
+            return
+
+        print("FAILED:")
+        print(error)
+
+        error_context = error
+        files = new_files
+
+    print("\nFAILED AFTER MAX ITERATIONS")
+    print("Restoring backup")
+
+    for source_path, backup_path in BACKUP_PATHS.items():
+        shutil.copy(backup_path, source_path)
+
+
+if __name__ == "__main__":
+    task = input("Task: ").strip()
+
+    if not task:
+        print("Task is empty")
+    else:
+        run_agent(task)
