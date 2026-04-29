@@ -139,16 +139,33 @@ Files:
 {file_context}
 """
 
-    response = requests.post(
-        "http://localhost:11434/api/generate",
-        json={
-            "model": MODEL,
-            "prompt": prompt,
-            "stream": False
-        }
-    )
+    try:
+        # Ask local Ollama to generate full replacement files.
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": MODEL,
+                "prompt": prompt,
+                "stream": False,
+            },
+            timeout=120,
+        )
 
-    return parse_generated_files(response.json()["response"])
+        # Convert HTTP errors like 404/500 into readable Python exceptions.
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(
+            "Ollama request failed. Make sure Ollama is running at "
+            "http://localhost:11434 and model qwen2.5-coder is installed."
+        ) from e
+
+    data = response.json()
+
+    if "response" not in data:
+        raise RuntimeError(f"Ollama response does not contain 'response': {data}")
+
+    return parse_generated_files(data["response"])
+
 
 def check_code(files):
     # syntax check

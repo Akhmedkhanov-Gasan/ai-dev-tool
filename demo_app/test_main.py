@@ -53,3 +53,10 @@ def test_build_info():
 
     assert response.status_code == 200
     assert response.json() == {"name": "demo_app", "version": "1.0.0"}
+
+
+def test_ready():
+    response = client.get("/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"ready": True}

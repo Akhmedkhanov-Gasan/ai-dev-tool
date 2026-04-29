@@ -31,3 +31,7 @@ async def status():
 @app.get("/build-info")
 async def build_info():
     return {"name": "demo_app", "version": "1.0.0"}
+
+@app.get("/ready")
+async def ready_check():
+    return {"ready": True}
