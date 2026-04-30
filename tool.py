@@ -72,6 +72,20 @@ def parse_generated_files(text: str) -> dict[str, str]:
     return files
 
 
+def extract_get_routes(code: str) -> set[str]:
+    # Collect existing GET routes so the model cannot silently remove API endpoints.
+    routes = set()
+
+    for line in code.splitlines():
+        line = line.strip()
+
+        if line.startswith('@app.get("') and line.endswith('")'):
+            route = line.removeprefix('@app.get("').removesuffix('")')
+            routes.add(route)
+
+    return routes
+
+
 def show_diff(path: str, old_code: str, new_code: str):
     diff = difflib.unified_diff(
         old_code.splitlines(),
@@ -128,6 +142,10 @@ Return ONLY the full updated files in this exact format:
 Do NOT use markdown.
 Always add or update tests for the feature you implement.
 Keep existing tests unless the task explicitly requires changing behavior.
+
+Do not remove existing endpoints unless the task explicitly asks for removal.
+If a route already exists, keep it exactly unless the task asks to change it.
+When fixing previous errors, preserve all existing routes from the provided files.
 
 Task:
 {task}
@@ -234,7 +252,20 @@ def run_agent(task):
         try:
             new_files = generate_code(task, files, error_context)
         except Exception as e:
-            error_context = f"Model response parse error:\n{e}"
+            error_context = f"Code generation failed:\n{e}"
+            print("FAILED:")
+            print(error_context)
+            continue
+        # Reject generated code that removes existing routes.
+        old_routes = extract_get_routes(files[APP_FILE_PATH])
+        new_routes = extract_get_routes(new_files[APP_FILE_PATH])
+        removed_routes = old_routes - new_routes
+
+        if removed_routes:
+            error_context = (
+                "Generated code removed existing routes, which is not allowed "
+                f"unless the task explicitly asks for it: {sorted(removed_routes)}"
+            )
             print("FAILED:")
             print(error_context)
             continue

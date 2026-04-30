@@ -35,3 +35,7 @@ async def build_info():
 @app.get("/ready")
 async def ready_check():
     return {"ready": True}
+
+@app.get("/metrics")
+async def metrics():
+    return {"requests": 0}
