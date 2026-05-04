@@ -1,5 +1,3 @@
-import pytest
-
 from tool import APP_FILE_PATH, TEST_FILE_PATH, extract_get_routes, parse_generated_files
 
 
