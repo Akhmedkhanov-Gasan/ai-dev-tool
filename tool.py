@@ -4,6 +4,7 @@ import ast
 import subprocess
 import os
 import difflib
+import argparse
 
 
 APP_FILE_PATH = "demo_app/main.py"
@@ -237,7 +238,7 @@ def check_code(files):
     return True, ""
 
 
-def run_agent(task):
+def run_agent(task, dry_run=False):
     for source_path, backup_path in BACKUP_PATHS.items():
         os.makedirs(os.path.dirname(backup_path), exist_ok=True)
         shutil.copy(source_path, backup_path)
@@ -270,12 +271,34 @@ def run_agent(task):
             print(error_context)
             continue
 
+        # First check that the generated app still passes the original tests.
+        baseline_files = {
+            APP_FILE_PATH: new_files[APP_FILE_PATH],
+            TEST_FILE_PATH: original_files[TEST_FILE_PATH],
+        }
+
+        ok, error = check_code(baseline_files)
+
+        if not ok:
+            error_context = (
+                "Generated app code does not pass the original tests. "
+                "Do not change existing behavior unless the task explicitly asks for it.\n"
+                f"{error}"
+            )
+            print("FAILED:")
+            print(error_context)
+            continue
+
         ok, error = check_code(new_files)
 
         if ok:
             write_project_files(original_files)
 
             show_project_diff(original_files, new_files)
+
+            if dry_run:
+                print("DRY RUN: changes were not applied")
+                return
 
             answer = input("\nApply changes? [y/N]: ").strip().lower()
 
@@ -302,9 +325,13 @@ def run_agent(task):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args()
+
     task = input("Task: ").strip()
 
     if not task:
         print("Task is empty")
     else:
-        run_agent(task)
+        run_agent(task, dry_run=args.dry_run)
