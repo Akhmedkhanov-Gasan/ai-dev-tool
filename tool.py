@@ -330,9 +330,15 @@ def run_agent(task, dry_run=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("task", nargs="?", help="Task for the coding agent")
     args = parser.parse_args()
 
-    task = input("Task: ").strip()
+    task = args.task
+
+    if task is None:
+        task = input("Task: ").strip()
+    else:
+        task = task.strip()
 
     if not task:
         print("Task is empty")
