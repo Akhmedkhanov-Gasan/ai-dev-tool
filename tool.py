@@ -187,55 +187,60 @@ Files:
 
 
 def check_code(files):
-    # syntax check
+    # Syntax can be checked in memory before touching files on disk.
     for path, code in files.items():
         try:
             ast.parse(code)
         except Exception as e:
             return False, f"Syntax error in {path}:\n{e}"
 
-    write_project_files(files)
+    original_files = read_project_files()
 
-    venv_python = os.path.abspath(".venv/Scripts/python.exe")
+    try:
+        write_project_files(files)
 
-    # ruff
-    ruff_result = subprocess.run(
-        [venv_python, "-m", "ruff", "check", "demo_app"],
-        capture_output=True,
-        text=True
-    )
+        venv_python = os.path.abspath(".venv/Scripts/python.exe")
 
-    if ruff_result.returncode == 0:
-        print("RUFF: passed")
-    else:
-        print_command_output("ruff", ruff_result)
-        return False, f"Ruff error:\n{ruff_result.stdout}\n{ruff_result.stderr}"
+        # Ruff validates style and catches simple static errors.
+        ruff_result = subprocess.run(
+            [venv_python, "-m", "ruff", "check", "demo_app"],
+            capture_output=True,
+            text=True,
+        )
 
-    # pytest
-    pytest_result = subprocess.run(
-        [venv_python, "-m", "pytest", "-v", "demo_app"],
-        capture_output=True,
-        text=True
-    )
+        if ruff_result.returncode == 0:
+            print("RUFF: passed")
+        else:
+            print_command_output("ruff", ruff_result)
+            return False, f"Ruff error:\n{ruff_result.stdout}\n{ruff_result.stderr}"
 
-    if pytest_result.returncode == 0:
-        passed_count = pytest_result.stdout.count(" PASSED")
-        print(f"PYTEST: passed, {passed_count} tests")
-    else:
-        print_command_output("pytest", pytest_result)
-        return False, f"Pytest error:\n{pytest_result.stdout}\n{pytest_result.stderr}"
+        # Pytest validates application behavior through tests.
+        pytest_result = subprocess.run(
+            [venv_python, "-m", "pytest", "-v", "demo_app"],
+            capture_output=True,
+            text=True,
+        )
 
+        if pytest_result.returncode == 0:
+            passed_count = pytest_result.stdout.count(" PASSED")
+            print(f"PYTEST: passed, {passed_count} tests")
+        else:
+            print_command_output("pytest", pytest_result)
+            return False, f"Pytest error:\n{pytest_result.stdout}\n{pytest_result.stderr}"
 
-    result = subprocess.run(
-        [venv_python, "-c", "import demo_app.main"],
-        capture_output=True,
-        text=True
-    )
+        result = subprocess.run(
+            [venv_python, "-c", "import demo_app.main"],
+            capture_output=True,
+            text=True,
+        )
 
-    if result.returncode != 0:
-        return False, f"Runtime error:\n{result.stderr}"
+        if result.returncode != 0:
+            return False, f"Runtime error:\n{result.stderr}"
 
-    return True, ""
+        return True, ""
+    finally:
+        # Validation writes candidate files temporarily; always restore the workspace.
+        write_project_files(original_files)
 
 
 def run_agent(task, dry_run=False):
@@ -292,8 +297,6 @@ def run_agent(task, dry_run=False):
         ok, error = check_code(new_files)
 
         if ok:
-            write_project_files(original_files)
-
             show_project_diff(original_files, new_files)
 
             if dry_run:
