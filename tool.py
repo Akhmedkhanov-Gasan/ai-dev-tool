@@ -13,9 +13,19 @@ BACKUP_PATHS = {
     APP_FILE_PATH: "demo_app/backups/main.py.bak",
     TEST_FILE_PATH: "demo_app/backups/test_main.py.bak",
 }
-MODEL = "qwen2.5-coder"
+
+DEFAULT_MODEL = "qwen2.5-coder"
+DEFAULT_PROVIDER_URL = "http://localhost:11434/api/generate"
 
 MAX_ITERATIONS = 3
+
+def get_model() -> str:
+    return os.getenv("AI_AGENT_MODEL", DEFAULT_MODEL)
+
+
+def get_provider_url() -> str:
+    return os.getenv("AI_AGENT_PROVIDER_URL", DEFAULT_PROVIDER_URL)
+
 
 def read_file(path: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
@@ -161,9 +171,9 @@ Files:
     try:
         # Ask local Ollama to generate full replacement files.
         response = requests.post(
-            "http://localhost:11434/api/generate",
+            get_provider_url(),
             json={
-                "model": MODEL,
+                "model": get_model(),
                 "prompt": prompt,
                 "stream": False,
             },
@@ -174,8 +184,8 @@ Files:
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
         raise RuntimeError(
-            "Ollama request failed. Make sure Ollama is running at "
-            "http://localhost:11434 and model qwen2.5-coder is installed."
+            "Provider request failed. Make sure the provider is running at "
+            f"{get_provider_url()} and model {get_model()} is available."
         ) from e
 
     data = response.json()
