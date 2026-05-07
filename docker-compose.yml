@@ -6,3 +6,5 @@ services:
       - .:/app
     environment:
       PYTHONPATH: /app
+      AI_AGENT_PROVIDER_URL: http://host.docker.internal:11434/api/generate
+      AI_AGENT_MODEL: qwen2.5-coder

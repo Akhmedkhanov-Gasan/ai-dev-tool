@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from demo_app.main import app
+from datetime import datetime, timezone
 
 
 client = TestClient(app)
@@ -21,10 +22,12 @@ def test_ping():
 
 
 def test_time():
+    before_request = datetime.now(timezone.utc)
     response = client.get("/time")
-
+    after_request = datetime.now(timezone.utc)
     assert response.status_code == 200
-    assert "current_time" in response.json()
+    current_time = datetime.fromisoformat(response.json()["current_time"])
+    assert before_request <= current_time <= after_request
 
 
 def test_hello():

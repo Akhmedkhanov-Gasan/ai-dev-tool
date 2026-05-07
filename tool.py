@@ -5,6 +5,7 @@ import subprocess
 import os
 import difflib
 import argparse
+import sys
 
 
 APP_FILE_PATH = "demo_app/main.py"
@@ -186,6 +187,12 @@ Do not remove existing endpoints unless the task explicitly asks for removal.
 If a route already exists, keep it exactly unless the task asks to change it.
 When fixing previous errors, preserve all existing routes from the provided files.
 
+Preserve all imports required by existing code.
+
+Do not weaken existing behavior or replace dynamic behavior with hardcoded values.
+
+When Previous errors contains Ruff F821, fix missing imports before making any other changes.
+
 Task:
 {task}
 
@@ -214,11 +221,11 @@ def check_code(files):
     try:
         write_project_files(files)
 
-        venv_python = os.path.abspath(".venv/Scripts/python.exe")
+        python_executable = sys.executable
 
         # Ruff validates style and catches simple static errors.
         ruff_result = subprocess.run(
-            [venv_python, "-m", "ruff", "check", "demo_app"],
+            [python_executable, "-m", "ruff", "check", "demo_app"],
             capture_output=True,
             text=True,
         )
@@ -231,7 +238,7 @@ def check_code(files):
 
         # Pytest validates application behavior through tests.
         pytest_result = subprocess.run(
-            [venv_python, "-m", "pytest", "-v", "demo_app"],
+            [python_executable, "-m", "pytest", "-v", "demo_app"],
             capture_output=True,
             text=True,
         )
@@ -244,7 +251,7 @@ def check_code(files):
             return False, f"Pytest error:\n{pytest_result.stdout}\n{pytest_result.stderr}"
 
         result = subprocess.run(
-            [venv_python, "-c", "import demo_app.main"],
+            [python_executable, "-c", "import demo_app.main"],
             capture_output=True,
             text=True,
         )
