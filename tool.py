@@ -131,6 +131,34 @@ def print_command_output(name: str, result: subprocess.CompletedProcess):
         print("No output")
 
 
+def request_model(prompt: str) -> str:
+    try:
+        # Send the prompt to the configured provider and return the raw model text.
+        response = requests.post(
+            get_provider_url(),
+            json={
+                "model": get_model(),
+                "prompt": prompt,
+                "stream": False,
+            },
+            timeout=120,
+        )
+
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(
+            "Provider request failed. Make sure the provider is running at "
+            f"{get_provider_url()} and model {get_model()} is available."
+        ) from e
+
+    data = response.json()
+
+    if "response" not in data:
+        raise RuntimeError(f"Provider response does not contain 'response': {data}")
+
+    return data["response"]
+
+
 def generate_code(task, files, error_context):
     file_context = "\n\n".join(
         f"=== {path} ===\n{code}"
@@ -168,32 +196,9 @@ Files:
 {file_context}
 """
 
-    try:
-        # Ask local Ollama to generate full replacement files.
-        response = requests.post(
-            get_provider_url(),
-            json={
-                "model": get_model(),
-                "prompt": prompt,
-                "stream": False,
-            },
-            timeout=120,
-        )
+    model_response = request_model(prompt)
 
-        # Convert HTTP errors like 404/500 into readable Python exceptions.
-        response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        raise RuntimeError(
-            "Provider request failed. Make sure the provider is running at "
-            f"{get_provider_url()} and model {get_model()} is available."
-        ) from e
-
-    data = response.json()
-
-    if "response" not in data:
-        raise RuntimeError(f"Ollama response does not contain 'response': {data}")
-
-    return parse_generated_files(data["response"])
+    return parse_generated_files(model_response)
 
 
 def check_code(files):
