@@ -6,7 +6,9 @@ import os
 import difflib
 import argparse
 import sys
+from dotenv import load_dotenv
 
+load_dotenv()
 
 APP_FILE_PATH = "demo_app/main.py"
 TEST_FILE_PATH = "demo_app/test_main.py"
@@ -17,7 +19,7 @@ BACKUP_PATHS = {
     TEST_FILE_PATH: "demo_app/backups/test_main.py.bak",
 }
 
-DEFAULT_MODEL = "qwen2.5-coder"
+DEFAULT_MODEL = "qwen3-coder:30b"
 DEFAULT_PROVIDER_URL = "http://localhost:11434/api/generate"
 
 MAX_ITERATIONS = 3
@@ -273,6 +275,11 @@ def check_code(files):
 
 
 def run_agent(task, dry_run=False):
+
+    print(f"MODEL: {get_model()}")
+    print(f"PROVIDER_URL: {get_provider_url()}")
+    print(f"DRY_RUN: {dry_run}")
+
     for source_path, backup_path in BACKUP_PATHS.items():
         os.makedirs(os.path.dirname(backup_path), exist_ok=True)
         shutil.copy(source_path, backup_path)
@@ -280,6 +287,7 @@ def run_agent(task, dry_run=False):
     original_files = read_project_files()
     files = original_files
     error_context = ""
+    final_error_phase = ""
 
     for i in range(MAX_ITERATIONS):
         print(f"\n--- ITERATION {i+1} ---")
@@ -287,6 +295,7 @@ def run_agent(task, dry_run=False):
         try:
             new_files = generate_code(task, files, error_context)
         except Exception as e:
+            final_error_phase = "code generation"
             error_context = f"Code generation failed:\n{e}"
             print("FAILED:")
             print(error_context)
@@ -297,6 +306,7 @@ def run_agent(task, dry_run=False):
         removed_routes = old_routes - new_routes
 
         if removed_routes:
+            final_error_phase = "route protection"
             error_context = (
                 "Generated code removed existing routes, which is not allowed "
                 f"unless the task explicitly asks for it: {sorted(removed_routes)}"
@@ -311,11 +321,13 @@ def run_agent(task, dry_run=False):
             TEST_FILE_PATH: original_files[TEST_FILE_PATH],
         }
 
+        print("\n--- BASELINE VALIDATION ---")
         ok, error = check_code(baseline_files)
 
         if not ok:
+            final_error_phase = "baseline validation"
             error_context = (
-                "Generated app code does not pass the original tests. "
+                "Baseline validation failed. Generated app code does not pass the original tests. "
                 "Do not change existing behavior unless the task explicitly asks for it.\n"
                 f"{error}"
             )
@@ -323,6 +335,7 @@ def run_agent(task, dry_run=False):
             print(error_context)
             continue
 
+        print("\n--- CANDIDATE VALIDATION ---")
         ok, error = check_code(new_files)
 
         if ok:
@@ -330,18 +343,38 @@ def run_agent(task, dry_run=False):
 
             if dry_run:
                 print("DRY RUN: changes were not applied")
+                print("\n--- RUN SUMMARY ---")
+                print("Status: dry-run completed")
+                print(f"Iterations: {i + 1}")
+                print("Baseline validation: passed")
+                print("Candidate validation: passed")
+                print(f"Dry run: {dry_run}")
                 return
 
             answer = input("\nApply changes? [y/N]: ").strip().lower()
 
             if answer != "y":
                 print("Changes rejected")
+                print("\n--- RUN SUMMARY ---")
+                print("Status: rejected")
+                print(f"Iterations: {i + 1}")
+                print("Baseline validation: passed")
+                print("Candidate validation: passed")
+                print(f"Dry run: {dry_run}")
                 return
 
             write_project_files(new_files)
 
             print("SUCCESS: Code updated")
+            print("\n--- RUN SUMMARY ---")
+            print("Status: applied")
+            print(f"Iterations: {i + 1}")
+            print("Baseline validation: passed")
+            print("Candidate validation: passed")
+            print(f"Dry run: {dry_run}")
             return
+
+        final_error_phase = "candidate validation"
 
         print("FAILED:")
         print(error)
@@ -351,6 +384,12 @@ def run_agent(task, dry_run=False):
 
     print("\nFAILED AFTER MAX ITERATIONS")
     print("Restoring backup")
+
+    print("\n--- RUN SUMMARY ---")
+    print("Status: failed")
+    print(f"Iterations: {MAX_ITERATIONS}")
+    print(f"Final error phase: {final_error_phase or 'unknown'}")
+    print(f"Dry run: {dry_run}")
 
     for source_path, backup_path in BACKUP_PATHS.items():
         shutil.copy(backup_path, source_path)
