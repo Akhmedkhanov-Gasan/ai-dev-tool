@@ -10,6 +10,8 @@ import sys
 
 APP_FILE_PATH = "demo_app/main.py"
 TEST_FILE_PATH = "demo_app/test_main.py"
+RULES_FILE_PATH = "AGENT_RULES.md"
+
 BACKUP_PATHS = {
     APP_FILE_PATH: "demo_app/backups/main.py.bak",
     TEST_FILE_PATH: "demo_app/backups/test_main.py.bak",
@@ -43,6 +45,13 @@ def read_project_files() -> dict[str, str]:
         APP_FILE_PATH: read_file(APP_FILE_PATH),
         TEST_FILE_PATH: read_file(TEST_FILE_PATH),
     }
+
+
+def read_agent_rules() -> str:
+    if not os.path.exists(RULES_FILE_PATH):
+        return "No project-specific agent rules."
+
+    return read_file(RULES_FILE_PATH)
 
 
 def write_project_files(files: dict[str, str]):
@@ -165,21 +174,19 @@ def generate_code(task, files, error_context):
         f"=== {path} ===\n{code}"
         for path, code in files.items()
     )
+    agent_rules = read_agent_rules()
 
     prompt = f"""
 You are a senior Python developer.
 
 Modify the FastAPI app and its tests according to the task.
 
+Follow these project rules:
+
+{agent_rules}
+
 Return ONLY the full updated files in this exact format:
 
-=== demo_app/main.py ===
-<full updated app file>
-
-=== demo_app/test_main.py ===
-<full updated test file>
-
-Do NOT use markdown.
 Always add or update tests for the feature you implement.
 Keep existing tests unless the task explicitly requires changing behavior.
 
