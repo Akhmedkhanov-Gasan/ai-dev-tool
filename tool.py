@@ -8,6 +8,8 @@ import argparse
 import sys
 from dotenv import load_dotenv
 
+from engine.index import format_search_results, index_project, search_project
+
 load_dotenv()
 
 APP_FILE_PATH = "demo_app/main.py"
@@ -54,6 +56,15 @@ def read_agent_rules() -> str:
         return "No project-specific agent rules."
 
     return read_file(RULES_FILE_PATH)
+
+
+def read_relevant_project_context(task: str) -> str:
+    try:
+        results = search_project(task, limit=3)
+    except Exception as e:
+        return f"Project context index is not available: {e}"
+
+    return format_search_results(results)
 
 
 def write_project_files(files: dict[str, str]):
@@ -177,6 +188,7 @@ def generate_code(task, files, error_context):
         for path, code in files.items()
     )
     agent_rules = read_agent_rules()
+    project_context = read_relevant_project_context(task)
 
     prompt = f"""
 You are a senior Python developer.
@@ -208,8 +220,12 @@ Task:
 Previous errors:
 {error_context}
 
+Relevant project context:
+{project_context}
+
 Files:
 {file_context}
+
 """
 
     model_response = request_model(prompt)
@@ -398,15 +414,38 @@ def run_agent(task, dry_run=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("task", nargs="?", help="Task for the coding agent")
+    parser.add_argument("--limit", type=int, default=5)
+    parser.add_argument("args", nargs="*", help="Agent task or index/search command")
     args = parser.parse_args()
 
-    task = args.task
+    if args.args and args.args[0] == "index":
+        indexed_chunks = index_project()
+        print(f"Indexed {indexed_chunks} project chunks")
+        sys.exit(0)
 
-    if task is None:
+    if args.args and args.args[0] == "search":
+        query = " ".join(args.args[1:]).strip()
+
+        if not query:
+            print("Search query is empty")
+            sys.exit(1)
+
+        results = search_project(query, limit=args.limit)
+
+        if not results:
+            print("No results")
+            sys.exit(0)
+
+        for result in results:
+            print(f"\n--- {result['path']}#{result['chunk_index']} ---")
+            print(result["snippet"])
+
+        sys.exit(0)
+
+    task = " ".join(args.args).strip()
+
+    if not task:
         task = input("Task: ").strip()
-    else:
-        task = task.strip()
 
     if not task:
         print("Task is empty")

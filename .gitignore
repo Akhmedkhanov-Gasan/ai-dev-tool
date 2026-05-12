@@ -147,4 +147,6 @@ __pycache__/
 .pytest_cache/
 .env
 demo_app/backups/
+.agent/
 *.pyc
+tmp_docs/
