@@ -9,6 +9,8 @@ import sys
 from dotenv import load_dotenv
 
 from engine.index import format_search_results, index_project, search_project
+from engine.generated_files import parse_generated_files
+from engine.schemas import AgentState
 
 load_dotenv()
 
@@ -70,40 +72,6 @@ def read_relevant_project_context(task: str) -> str:
 def write_project_files(files: dict[str, str]):
     for path, code in files.items():
         write_file(path, code)
-
-
-def parse_generated_files(text: str) -> dict[str, str]:
-    files = {}
-    current_path = None
-    current_lines = []
-
-    for line in text.splitlines():
-        if line.strip().startswith("```"):
-            continue
-
-        if line.startswith("=== ") and line.endswith(" ==="):
-            if current_path is not None:
-                files[current_path] = "\n".join(current_lines).strip() + "\n"
-
-            current_path = line.removeprefix("=== ").removesuffix(" ===").strip()
-            current_lines = []
-        elif current_path is not None:
-            current_lines.append(line)
-
-    if current_path is not None:
-        files[current_path] = "\n".join(current_lines).strip() + "\n"
-
-    required_paths = {APP_FILE_PATH, TEST_FILE_PATH}
-    missing_paths = required_paths - set(files)
-    extra_paths = set(files) - required_paths
-
-    if missing_paths:
-        raise ValueError(f"Missing files in model response: {sorted(missing_paths)}")
-
-    if extra_paths:
-        raise ValueError(f"Unexpected files in model response: {sorted(extra_paths)}")
-
-    return files
 
 
 def extract_get_routes(code: str) -> set[str]:
@@ -182,13 +150,12 @@ def request_model(prompt: str) -> str:
     return data["response"]
 
 
-def generate_code(task, files, error_context):
+def generate_code(task, files, error_context, project_context):
     file_context = "\n\n".join(
         f"=== {path} ===\n{code}"
         for path, code in files.items()
     )
     agent_rules = read_agent_rules()
-    project_context = read_relevant_project_context(task)
 
     prompt = f"""
 You are a senior Python developer.
@@ -199,7 +166,27 @@ Follow these project rules:
 
 {agent_rules}
 
-Return ONLY the full updated files in this exact format:
+Return ONLY valid JSON.
+Do not wrap the JSON in Markdown.
+Do not add explanations before or after the JSON.
+
+The JSON must match this schema:
+
+{{
+  "files": [
+    {{
+      "path": "demo_app/main.py",
+      "content": "full updated content of demo_app/main.py"
+    }},
+    {{
+      "path": "demo_app/test_main.py",
+      "content": "full updated content of demo_app/test_main.py"
+    }}
+  ]
+}}
+
+Both files are required.
+Return full file contents, not a diff or patch.
 
 Always add or update tests for the feature you implement.
 Keep existing tests unless the task explicitly requires changing behavior.
@@ -301,34 +288,46 @@ def run_agent(task, dry_run=False):
         shutil.copy(source_path, backup_path)
 
     original_files = read_project_files()
-    files = original_files
-    error_context = ""
     final_error_phase = ""
+    state = AgentState(
+        task=task,
+        original_files=original_files,
+        current_files=original_files,
+        retrieved_context=read_relevant_project_context(task),
+    )
 
     for i in range(MAX_ITERATIONS):
-        print(f"\n--- ITERATION {i+1} ---")
+        print(f"\n--- ITERATION {i + 1} ---")
+        error_context = "\n\n".join(state.errors)
 
         try:
-            new_files = generate_code(task, files, error_context)
+            new_files = generate_code(
+                task,
+                state.current_files,
+                error_context,
+                state.retrieved_context,
+            )
         except Exception as e:
             final_error_phase = "code generation"
-            error_context = f"Code generation failed:\n{e}"
+            error_message = f"Code generation failed:\n{e}"
+            state.errors.append(error_message)
             print("FAILED:")
-            print(error_context)
+            print(error_message)
             continue
         # Reject generated code that removes existing routes.
-        old_routes = extract_get_routes(files[APP_FILE_PATH])
+        old_routes = extract_get_routes(state.current_files[APP_FILE_PATH])
         new_routes = extract_get_routes(new_files[APP_FILE_PATH])
         removed_routes = old_routes - new_routes
 
         if removed_routes:
             final_error_phase = "route protection"
-            error_context = (
+            error_message = (
                 "Generated code removed existing routes, which is not allowed "
                 f"unless the task explicitly asks for it: {sorted(removed_routes)}"
             )
+            state.errors.append(error_message)
             print("FAILED:")
-            print(error_context)
+            print(error_message)
             continue
 
         # First check that the generated app still passes the original tests.
@@ -342,13 +341,14 @@ def run_agent(task, dry_run=False):
 
         if not ok:
             final_error_phase = "baseline validation"
-            error_context = (
+            error_message = (
                 "Baseline validation failed. Generated app code does not pass the original tests. "
                 "Do not change existing behavior unless the task explicitly asks for it.\n"
                 f"{error}"
             )
+            state.errors.append(error_message)
             print("FAILED:")
-            print(error_context)
+            print(error_message)
             continue
 
         print("\n--- CANDIDATE VALIDATION ---")
@@ -395,8 +395,8 @@ def run_agent(task, dry_run=False):
         print("FAILED:")
         print(error)
 
-        error_context = error
-        files = new_files
+        state.errors.append(error)
+        state.current_files = new_files
 
     print("\nFAILED AFTER MAX ITERATIONS")
     print("Restoring backup")
