@@ -40,4 +40,19 @@ class AgentState(BaseModel):
     errors: list[str] = Field(default_factory=list)
     iteration: int = 0
     status: str = "started"
-    
+
+
+class ValidationResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    phase: str
+    message: str = ""
+
+    @field_validator("phase")
+    @classmethod
+    def phase_must_not_be_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("phase must not be empty")
+
+        return value
