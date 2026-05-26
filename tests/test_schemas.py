@@ -1,4 +1,6 @@
-from engine.schemas import AgentState
+import pytest
+
+from engine.schemas import AgentState, ValidationResult
 
 
 def test_agent_state_stores_initial_agent_data():
@@ -35,3 +37,26 @@ def test_agent_state_errors_are_not_shared_between_instances():
 
     assert first_state.errors == ["first error"]
     assert second_state.errors == []
+
+
+def test_validation_result_stores_validation_data():
+    result = ValidationResult(
+        ok=False,
+        phase="ruff",
+        message="Ruff error",
+    )
+
+    assert result.ok is False
+    assert result.phase == "ruff"
+    assert result.message == "Ruff error"
+
+
+def test_validation_result_uses_empty_message_by_default():
+    result = ValidationResult(ok=True, phase="passed")
+
+    assert result.message == ""
+
+
+def test_validation_result_rejects_empty_phase():
+    with pytest.raises(ValueError, match="phase must not be empty"):
+        ValidationResult(ok=False, phase=" ")

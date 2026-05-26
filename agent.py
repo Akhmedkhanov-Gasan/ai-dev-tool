@@ -1,4 +1,3 @@
-import requests
 import shutil
 import ast
 import subprocess
@@ -11,7 +10,8 @@ from dotenv import load_dotenv
 from engine.index import index_project, search_project
 from engine.retrieval import retrieve_project_context
 from engine.generated_files import parse_generated_files
-from engine.schemas import AgentState
+from engine.schemas import AgentState, ValidationResult
+from engine.llm import get_model, get_provider_url, request_model
 
 load_dotenv()
 
@@ -24,17 +24,8 @@ BACKUP_PATHS = {
     TEST_FILE_PATH: "demo_app/backups/test_main.py.bak",
 }
 
-DEFAULT_MODEL = "qwen3-coder:30b"
-DEFAULT_PROVIDER_URL = "http://localhost:11434/api/generate"
 
 MAX_ITERATIONS = 3
-
-def get_model() -> str:
-    return os.getenv("AI_AGENT_MODEL", DEFAULT_MODEL)
-
-
-def get_provider_url() -> str:
-    return os.getenv("AI_AGENT_PROVIDER_URL", DEFAULT_PROVIDER_URL)
 
 
 def read_file(path: str) -> str:
@@ -117,34 +108,6 @@ def print_command_output(name: str, result: subprocess.CompletedProcess):
         print("No output")
 
 
-def request_model(prompt: str) -> str:
-    try:
-        # Send the prompt to the configured provider and return the raw model text.
-        response = requests.post(
-            get_provider_url(),
-            json={
-                "model": get_model(),
-                "prompt": prompt,
-                "stream": False,
-            },
-            timeout=120,
-        )
-
-        response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        raise RuntimeError(
-            "Provider request failed. Make sure the provider is running at "
-            f"{get_provider_url()} and model {get_model()} is available."
-        ) from e
-
-    data = response.json()
-
-    if "response" not in data:
-        raise RuntimeError(f"Provider response does not contain 'response': {data}")
-
-    return data["response"]
-
-
 def generate_code(task, files, error_context, project_context):
     file_context = "\n\n".join(
         f"=== {path} ===\n{code}"
@@ -221,7 +184,11 @@ def check_code(files):
         try:
             ast.parse(code)
         except Exception as e:
-            return False, f"Syntax error in {path}:\n{e}"
+            return ValidationResult(
+                ok=False,
+                phase="syntax",
+                message=f"Syntax error in {path}:\n{e}",
+            )
 
     original_files = read_project_files()
 
@@ -241,7 +208,11 @@ def check_code(files):
             print("RUFF: passed")
         else:
             print_command_output("ruff", ruff_result)
-            return False, f"Ruff error:\n{ruff_result.stdout}\n{ruff_result.stderr}"
+            return ValidationResult(
+                ok=False,
+                phase="ruff",
+                message=f"Ruff error:\n{ruff_result.stdout}\n{ruff_result.stderr}",
+            )
 
         # Pytest validates application behavior through tests.
         pytest_result = subprocess.run(
@@ -255,7 +226,11 @@ def check_code(files):
             print(f"PYTEST: passed, {passed_count} tests")
         else:
             print_command_output("pytest", pytest_result)
-            return False, f"Pytest error:\n{pytest_result.stdout}\n{pytest_result.stderr}"
+            return ValidationResult(
+                ok=False,
+                phase="pytest",
+                message=f"Pytest error:\n{pytest_result.stdout}\n{pytest_result.stderr}",
+            )
 
         result = subprocess.run(
             [python_executable, "-c", "import demo_app.main"],
@@ -264,9 +239,13 @@ def check_code(files):
         )
 
         if result.returncode != 0:
-            return False, f"Runtime error:\n{result.stderr}"
+            return ValidationResult(
+                ok=False,
+                phase="runtime",
+                message=f"Runtime error:\n{result.stderr}",
+            )
 
-        return True, ""
+        return ValidationResult(ok=True, phase="passed")
     finally:
         # Validation writes candidate files temporarily; always restore the workspace.
         write_project_files(original_files)
@@ -332,14 +311,14 @@ def run_agent(task, dry_run=False):
         }
 
         print("\n--- BASELINE VALIDATION ---")
-        ok, error = check_code(baseline_files)
+        baseline_result = check_code(baseline_files)
 
-        if not ok:
-            final_error_phase = "baseline validation"
+        if not baseline_result.ok:
+            final_error_phase = f"baseline validation: {baseline_result.phase}"
             error_message = (
                 "Baseline validation failed. Generated app code does not pass the original tests. "
                 "Do not change existing behavior unless the task explicitly asks for it.\n"
-                f"{error}"
+                f"{baseline_result.message}"
             )
             state.errors.append(error_message)
             print("FAILED:")
@@ -347,9 +326,9 @@ def run_agent(task, dry_run=False):
             continue
 
         print("\n--- CANDIDATE VALIDATION ---")
-        ok, error = check_code(new_files)
+        candidate_result = check_code(new_files)
 
-        if ok:
+        if candidate_result.ok:
             show_project_diff(original_files, new_files)
 
             if dry_run:
@@ -385,12 +364,12 @@ def run_agent(task, dry_run=False):
             print(f"Dry run: {dry_run}")
             return
 
-        final_error_phase = "candidate validation"
+        final_error_phase = f"candidate validation: {candidate_result.phase}"
 
         print("FAILED:")
-        print(error)
+        print(candidate_result.message)
 
-        state.errors.append(error)
+        state.errors.append(candidate_result.message)
         state.current_files = new_files
 
     print("\nFAILED AFTER MAX ITERATIONS")
