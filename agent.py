@@ -8,7 +8,8 @@ import argparse
 import sys
 from dotenv import load_dotenv
 
-from engine.index import format_search_results, index_project, search_project
+from engine.index import index_project, search_project
+from engine.retrieval import retrieve_project_context
 from engine.generated_files import parse_generated_files
 from engine.schemas import AgentState
 
@@ -60,13 +61,7 @@ def read_agent_rules() -> str:
     return read_file(RULES_FILE_PATH)
 
 
-def read_relevant_project_context(task: str) -> str:
-    try:
-        results = search_project(task, limit=3)
-    except Exception as e:
-        return f"Project context index is not available: {e}"
 
-    return format_search_results(results)
 
 
 def write_project_files(files: dict[str, str]):
@@ -293,7 +288,7 @@ def run_agent(task, dry_run=False):
         task=task,
         original_files=original_files,
         current_files=original_files,
-        retrieved_context=read_relevant_project_context(task),
+        retrieved_context=retrieve_project_context(task),
     )
 
     for i in range(MAX_ITERATIONS):
