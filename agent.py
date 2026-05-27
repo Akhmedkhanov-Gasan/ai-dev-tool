@@ -7,10 +7,10 @@ from dotenv import load_dotenv
 
 from engine.index import index_project, search_project
 from engine.retrieval import retrieve_project_context
-from engine.generated_files import parse_generated_files
 from engine.schemas import AgentState
-from engine.llm import get_model, get_provider_url, request_model
+from engine.llm import get_model, get_provider_url
 from engine.validation import check_code
+from engine.generation import generate_code
 from engine.routes import find_removed_get_routes
 
 load_dotenv()
@@ -78,79 +78,6 @@ def show_project_diff(old_files: dict[str, str], new_files: dict[str, str]):
         show_diff(path, old_code, new_files[path])
 
 
-
-
-
-def generate_code(task, files, error_context, project_context):
-    file_context = "\n\n".join(
-        f"=== {path} ===\n{code}"
-        for path, code in files.items()
-    )
-    agent_rules = read_agent_rules()
-
-    prompt = f"""
-You are a senior Python developer.
-
-Modify the FastAPI app and its tests according to the task.
-
-Follow these project rules:
-
-{agent_rules}
-
-Return ONLY valid JSON.
-Do not wrap the JSON in Markdown.
-Do not add explanations before or after the JSON.
-
-The JSON must match this schema:
-
-{{
-  "files": [
-    {{
-      "path": "demo_app/main.py",
-      "content": "full updated content of demo_app/main.py"
-    }},
-    {{
-      "path": "demo_app/test_main.py",
-      "content": "full updated content of demo_app/test_main.py"
-    }}
-  ]
-}}
-
-Both files are required.
-Return full file contents, not a diff or patch.
-
-Always add or update tests for the feature you implement.
-Keep existing tests unless the task explicitly requires changing behavior.
-
-Do not remove existing endpoints unless the task explicitly asks for removal.
-If a route already exists, keep it exactly unless the task asks to change it.
-When fixing previous errors, preserve all existing routes from the provided files.
-
-Preserve all imports required by existing code.
-
-Do not weaken existing behavior or replace dynamic behavior with hardcoded values.
-
-When Previous errors contains Ruff F821, fix missing imports before making any other changes.
-
-Task:
-{task}
-
-Previous errors:
-{error_context}
-
-Relevant project context:
-{project_context}
-
-Files:
-{file_context}
-
-"""
-
-    model_response = request_model(prompt)
-
-    return parse_generated_files(model_response)
-
-
 def run_agent(task, dry_run=False):
 
     print(f"MODEL: {get_model()}")
@@ -163,12 +90,14 @@ def run_agent(task, dry_run=False):
 
     original_files = read_project_files()
     final_error_phase = ""
+
     state = AgentState(
         task=task,
         original_files=original_files,
         current_files=original_files,
         retrieved_context=retrieve_project_context(task),
     )
+    agent_rules = read_agent_rules()
 
     for i in range(MAX_ITERATIONS):
         print(f"\n--- ITERATION {i + 1} ---")
@@ -180,6 +109,7 @@ def run_agent(task, dry_run=False):
                 state.current_files,
                 error_context,
                 state.retrieved_context,
+                agent_rules,
             )
         except Exception as e:
             final_error_phase = "code generation"
