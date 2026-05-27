@@ -1,6 +1,4 @@
 import shutil
-import ast
-import subprocess
 import os
 import difflib
 import argparse
@@ -10,8 +8,10 @@ from dotenv import load_dotenv
 from engine.index import index_project, search_project
 from engine.retrieval import retrieve_project_context
 from engine.generated_files import parse_generated_files
-from engine.schemas import AgentState, ValidationResult
+from engine.schemas import AgentState
 from engine.llm import get_model, get_provider_url, request_model
+from engine.validation import check_code
+from engine.routes import find_removed_get_routes
 
 load_dotenv()
 
@@ -60,20 +60,6 @@ def write_project_files(files: dict[str, str]):
         write_file(path, code)
 
 
-def extract_get_routes(code: str) -> set[str]:
-    # Collect existing GET routes so the model cannot silently remove API endpoints.
-    routes = set()
-
-    for line in code.splitlines():
-        line = line.strip()
-
-        if line.startswith('@app.get("') and line.endswith('")'):
-            route = line.removeprefix('@app.get("').removesuffix('")')
-            routes.add(route)
-
-    return routes
-
-
 def show_diff(path: str, old_code: str, new_code: str):
     diff = difflib.unified_diff(
         old_code.splitlines(),
@@ -92,20 +78,7 @@ def show_project_diff(old_files: dict[str, str], new_files: dict[str, str]):
         show_diff(path, old_code, new_files[path])
 
 
-def print_command_output(name: str, result: subprocess.CompletedProcess):
-    print(f"\n--- {name.upper()} OUTPUT ---")
 
-    output = result.stdout.strip()
-    error = result.stderr.strip()
-
-    if output:
-        print(output)
-
-    if error:
-        print(error)
-
-    if not output and not error:
-        print("No output")
 
 
 def generate_code(task, files, error_context, project_context):
@@ -178,79 +151,6 @@ Files:
     return parse_generated_files(model_response)
 
 
-def check_code(files):
-    # Syntax can be checked in memory before touching files on disk.
-    for path, code in files.items():
-        try:
-            ast.parse(code)
-        except Exception as e:
-            return ValidationResult(
-                ok=False,
-                phase="syntax",
-                message=f"Syntax error in {path}:\n{e}",
-            )
-
-    original_files = read_project_files()
-
-    try:
-        write_project_files(files)
-
-        python_executable = sys.executable
-
-        # Ruff validates style and catches simple static errors.
-        ruff_result = subprocess.run(
-            [python_executable, "-m", "ruff", "check", "demo_app"],
-            capture_output=True,
-            text=True,
-        )
-
-        if ruff_result.returncode == 0:
-            print("RUFF: passed")
-        else:
-            print_command_output("ruff", ruff_result)
-            return ValidationResult(
-                ok=False,
-                phase="ruff",
-                message=f"Ruff error:\n{ruff_result.stdout}\n{ruff_result.stderr}",
-            )
-
-        # Pytest validates application behavior through tests.
-        pytest_result = subprocess.run(
-            [python_executable, "-m", "pytest", "-v", "demo_app"],
-            capture_output=True,
-            text=True,
-        )
-
-        if pytest_result.returncode == 0:
-            passed_count = pytest_result.stdout.count(" PASSED")
-            print(f"PYTEST: passed, {passed_count} tests")
-        else:
-            print_command_output("pytest", pytest_result)
-            return ValidationResult(
-                ok=False,
-                phase="pytest",
-                message=f"Pytest error:\n{pytest_result.stdout}\n{pytest_result.stderr}",
-            )
-
-        result = subprocess.run(
-            [python_executable, "-c", "import demo_app.main"],
-            capture_output=True,
-            text=True,
-        )
-
-        if result.returncode != 0:
-            return ValidationResult(
-                ok=False,
-                phase="runtime",
-                message=f"Runtime error:\n{result.stderr}",
-            )
-
-        return ValidationResult(ok=True, phase="passed")
-    finally:
-        # Validation writes candidate files temporarily; always restore the workspace.
-        write_project_files(original_files)
-
-
 def run_agent(task, dry_run=False):
 
     print(f"MODEL: {get_model()}")
@@ -289,9 +189,10 @@ def run_agent(task, dry_run=False):
             print(error_message)
             continue
         # Reject generated code that removes existing routes.
-        old_routes = extract_get_routes(state.current_files[APP_FILE_PATH])
-        new_routes = extract_get_routes(new_files[APP_FILE_PATH])
-        removed_routes = old_routes - new_routes
+        removed_routes = find_removed_get_routes(
+            state.current_files[APP_FILE_PATH],
+            new_files[APP_FILE_PATH],
+        )
 
         if removed_routes:
             final_error_phase = "route protection"
@@ -311,7 +212,7 @@ def run_agent(task, dry_run=False):
         }
 
         print("\n--- BASELINE VALIDATION ---")
-        baseline_result = check_code(baseline_files)
+        baseline_result = check_code(baseline_files, original_files, write_project_files)
 
         if not baseline_result.ok:
             final_error_phase = f"baseline validation: {baseline_result.phase}"
@@ -326,7 +227,7 @@ def run_agent(task, dry_run=False):
             continue
 
         print("\n--- CANDIDATE VALIDATION ---")
-        candidate_result = check_code(new_files)
+        candidate_result = check_code(new_files, original_files, write_project_files)
 
         if candidate_result.ok:
             show_project_diff(original_files, new_files)
