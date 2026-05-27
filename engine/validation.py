@@ -3,6 +3,8 @@ import subprocess
 import sys
 
 from engine.schemas import ValidationResult
+from engine.project_files import write_project_files
+
 
 def print_command_output(name: str, result: subprocess.CompletedProcess):
     print(f"\n--- {name.upper()} OUTPUT ---")
@@ -20,7 +22,7 @@ def print_command_output(name: str, result: subprocess.CompletedProcess):
         print("No output")
 
 
-def check_code(files, original_files, write_project_files):
+def check_code(files, original_files):
     # Syntax can be checked in memory before touching files on disk.
     for path, code in files.items():
         try:

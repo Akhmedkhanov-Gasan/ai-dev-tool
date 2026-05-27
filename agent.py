@@ -12,37 +12,22 @@ from engine.llm import get_model, get_provider_url
 from engine.validation import check_code
 from engine.generation import generate_code
 from engine.routes import find_removed_get_routes
+from engine.project_files import (
+    APP_FILE_PATH,
+    TEST_FILE_PATH,
+    read_file,
+    read_project_files,
+    write_project_files,
+)
 
 load_dotenv()
 
-APP_FILE_PATH = "demo_app/main.py"
-TEST_FILE_PATH = "demo_app/test_main.py"
 RULES_FILE_PATH = "AGENT_RULES.md"
-
 BACKUP_PATHS = {
     APP_FILE_PATH: "demo_app/backups/main.py.bak",
     TEST_FILE_PATH: "demo_app/backups/test_main.py.bak",
 }
-
-
 MAX_ITERATIONS = 3
-
-
-def read_file(path: str) -> str:
-    with open(path, "r", encoding="utf-8") as f:
-        return f.read()
-
-
-def write_file(path: str, code: str):
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(code)
-
-
-def read_project_files() -> dict[str, str]:
-    return {
-        APP_FILE_PATH: read_file(APP_FILE_PATH),
-        TEST_FILE_PATH: read_file(TEST_FILE_PATH),
-    }
 
 
 def read_agent_rules() -> str:
@@ -50,14 +35,6 @@ def read_agent_rules() -> str:
         return "No project-specific agent rules."
 
     return read_file(RULES_FILE_PATH)
-
-
-
-
-
-def write_project_files(files: dict[str, str]):
-    for path, code in files.items():
-        write_file(path, code)
 
 
 def show_diff(path: str, old_code: str, new_code: str):
@@ -142,7 +119,7 @@ def run_agent(task, dry_run=False):
         }
 
         print("\n--- BASELINE VALIDATION ---")
-        baseline_result = check_code(baseline_files, original_files, write_project_files)
+        baseline_result = check_code(baseline_files, original_files)
 
         if not baseline_result.ok:
             final_error_phase = f"baseline validation: {baseline_result.phase}"
@@ -157,7 +134,7 @@ def run_agent(task, dry_run=False):
             continue
 
         print("\n--- CANDIDATE VALIDATION ---")
-        candidate_result = check_code(new_files, original_files, write_project_files)
+        candidate_result = check_code(new_files, original_files)
 
         if candidate_result.ok:
             show_project_diff(original_files, new_files)
