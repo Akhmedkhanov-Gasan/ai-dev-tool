@@ -30,18 +30,6 @@ class GeneratedFiles(BaseModel):
     files: list[GeneratedFile]
 
 
-class AgentState(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    task: str
-    original_files: dict[str, str]
-    current_files: dict[str, str]
-    retrieved_context: str = ""
-    errors: list[str] = Field(default_factory=list)
-    iteration: int = 0
-    status: str = "started"
-
-
 class ValidationResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -56,3 +44,16 @@ class ValidationResult(BaseModel):
             raise ValueError("phase must not be empty")
 
         return value
+
+class AgentState(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task: str
+    original_files: dict[str, str]
+    current_files: dict[str, str]
+    candidate_files: dict[str, str] = Field(default_factory=dict)
+    retrieved_context: str = ""
+    errors: list[str] = Field(default_factory=list)
+    last_validation_result: ValidationResult | None = None
+    iteration: int = 0
+    status: str = "started"

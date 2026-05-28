@@ -8,7 +8,9 @@ def test_agent_state_stores_initial_agent_data():
         task="Add /status endpoint",
         original_files={"demo_app/main.py": "old app"},
         current_files={"demo_app/main.py": "new app"},
+        candidate_files={"demo_app/main.py": "candidate app"},
         retrieved_context="context",
+        last_validation_result=ValidationResult(ok=True, phase="passed"),
         iteration=1,
         status="running",
     )
@@ -19,6 +21,10 @@ def test_agent_state_stores_initial_agent_data():
     assert state.retrieved_context == "context"
     assert state.iteration == 1
     assert state.status == "running"
+    assert state.candidate_files["demo_app/main.py"] == "candidate app"
+    assert state.last_validation_result is not None
+    assert state.last_validation_result.ok is True
+    assert state.last_validation_result.phase == "passed"
 
 
 def test_agent_state_errors_are_not_shared_between_instances():
@@ -60,3 +66,14 @@ def test_validation_result_uses_empty_message_by_default():
 def test_validation_result_rejects_empty_phase():
     with pytest.raises(ValueError, match="phase must not be empty"):
         ValidationResult(ok=False, phase=" ")
+
+
+def test_agent_state_workflow_fields_use_defaults():
+    state = AgentState(
+        task="task",
+        original_files={},
+        current_files={},
+    )
+
+    assert state.candidate_files == {}
+    assert state.last_validation_result is None
