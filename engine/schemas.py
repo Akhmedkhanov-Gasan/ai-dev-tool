@@ -57,3 +57,7 @@ class AgentState(BaseModel):
     last_validation_result: ValidationResult | None = None
     iteration: int = 0
     status: str = "started"
+    agent_rules: str = ""
+    final_error_phase: str = ""
+    max_iterations: int = 3
+
