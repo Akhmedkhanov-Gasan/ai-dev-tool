@@ -1,6 +1,7 @@
 from typing import Literal
 
 from langgraph.graph import END, START, StateGraph
+from collections.abc import Callable
 
 from engine.schemas import AgentState
 from workflow.nodes import (
@@ -10,6 +11,7 @@ from workflow.nodes import (
     prepare_retry_or_fail,
     route_guard,
 )
+
 
 
 def route_after_generation(
@@ -77,7 +79,21 @@ def build_agent_graph():
     return graph.compile()
 
 
-def run_agent_workflow(state: AgentState) -> AgentState:
+def run_agent_workflow(
+    state: AgentState,
+    on_update: Callable[[str, dict], None] | None = None,
+) -> AgentState:
     graph = build_agent_graph()
-    result = graph.invoke(state.model_dump())
-    return AgentState.model_validate(result)
+    current_state = state.model_dump()
+
+    for event in graph.stream(
+        current_state,
+        stream_mode="updates",
+    ):
+        for node_name, update in event.items():
+            current_state.update(update)
+
+            if on_update is not None:
+                on_update(node_name, update)
+
+    return AgentState.model_validate(current_state)

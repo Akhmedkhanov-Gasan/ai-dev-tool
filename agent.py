@@ -54,6 +54,22 @@ def show_project_diff(old_files: dict[str, str], new_files: dict[str, str]):
         show_diff(path, old_code, new_files[path])
 
 
+def print_workflow_update(node_name: str, update: dict):
+    iteration = update.get("iteration")
+    status = update.get("status", "completed")
+
+    if node_name == "generate_candidate" and iteration is not None:
+        print(f"\n--- ITERATION {iteration} ---")
+
+    print(f"{node_name}: {status}")
+
+    if status.endswith("_failed"):
+        errors = update.get("errors", [])
+
+        if errors:
+            print(errors[-1])
+
+
 def print_success_summary(state: AgentState, dry_run: bool, status: str):
     print("\n--- RUN SUMMARY ---")
     print(f"Status: {status}")
@@ -88,7 +104,10 @@ def run_agent(task, dry_run=False):
         max_iterations=MAX_ITERATIONS,
     )
 
-    state = run_agent_workflow(state)
+    state = run_agent_workflow(
+        state,
+        on_update=print_workflow_update,
+    )
 
     if state.status == "candidate_validation_passed":
         show_project_diff(original_files, state.candidate_files)
