@@ -9,9 +9,9 @@ from workflow.nodes import (
     candidate_validation,
     generate_candidate,
     prepare_retry_or_fail,
+    request_human_review,
     route_guard,
 )
-
 
 
 def route_after_generation(
@@ -43,9 +43,9 @@ def route_after_baseline(
 
 def route_after_candidate(
     state: AgentState,
-) -> Literal["prepare_retry_or_fail", "__end__"]:
+) -> Literal["request_human_review", "prepare_retry_or_fail"]:
     if state.status == "candidate_validation_passed":
-        return END
+        return "request_human_review"
 
     return "prepare_retry_or_fail"
 
@@ -67,6 +67,7 @@ def build_agent_graph():
     graph.add_node("baseline_validation", baseline_validation)
     graph.add_node("candidate_validation", candidate_validation)
     graph.add_node("prepare_retry_or_fail", prepare_retry_or_fail)
+    graph.add_node("request_human_review", request_human_review)
 
     graph.add_edge(START, "generate_candidate")
 
@@ -75,6 +76,7 @@ def build_agent_graph():
     graph.add_conditional_edges("baseline_validation", route_after_baseline)
     graph.add_conditional_edges("candidate_validation", route_after_candidate)
     graph.add_conditional_edges("prepare_retry_or_fail", route_after_retry)
+    graph.add_edge("request_human_review", END)
 
     return graph.compile()
 

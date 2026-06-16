@@ -103,3 +103,7 @@ def prepare_retry_or_fail(state: AgentState) -> dict:
         return {"status": "failed"}
 
     return {"status": "retrying"}
+
+
+def request_human_review(state: AgentState) -> dict:
+    return {"status": "human_review_required"}

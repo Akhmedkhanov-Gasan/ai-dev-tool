@@ -76,8 +76,9 @@ def test_run_agent_workflow_calls_on_update_for_successful_path(monkeypatch):
         ("route_guard", "route_protection_passed"),
         ("baseline_validation", "baseline_validation_passed"),
         ("candidate_validation", "candidate_validation_passed"),
+        ("request_human_review", "human_review_required"),
     ]
-    assert result.status == "candidate_validation_passed"
+    assert result.status == "human_review_required"
     assert result.iteration == 1
     assert result.candidate_files == candidate_files
 
@@ -159,8 +160,9 @@ def test_run_agent_workflow_streams_retry_path(monkeypatch):
         ("route_guard", "route_protection_passed"),
         ("baseline_validation", "baseline_validation_passed"),
         ("candidate_validation", "candidate_validation_passed"),
+        ("request_human_review", "human_review_required"),
     ]
-    assert result.status == "candidate_validation_passed"
+    assert result.status == "human_review_required"
     assert result.iteration == 2
     assert result.errors == ["test failed"]
 

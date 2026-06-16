@@ -178,4 +178,9 @@ def test_prepare_failure_when_iteration_limit_is_reached():
     )
 
     assert result == {"status": "failed"}
-    
+
+
+def test_request_human_review_marks_state_as_waiting_for_human():
+    result = nodes.request_human_review(make_state())
+
+    assert result == {"status": "human_review_required"}
