@@ -58,10 +58,10 @@ def test_successful_baseline_routes_to_candidate_validation():
     assert graph.route_after_baseline(state) == "candidate_validation"
 
 
-def test_successful_candidate_validation_ends_workflow():
+def test_successful_candidate_validation_routes_to_human_review():
     state = make_state(status="candidate_validation_passed")
 
-    assert graph.route_after_candidate(state) == END
+    assert graph.route_after_candidate(state) == "request_human_review"
 
 
 def test_failed_candidate_validation_routes_to_retry():
@@ -126,7 +126,7 @@ def test_workflow_completes_successful_path(monkeypatch):
 
     result = graph.run_agent_workflow(make_state())
 
-    assert result.status == "candidate_validation_passed"
+    assert result.status == "human_review_required"
     assert result.iteration == 1
     assert result.candidate_files == candidate_files
 

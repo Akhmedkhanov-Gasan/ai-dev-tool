@@ -109,7 +109,7 @@ def run_agent(task, dry_run=False):
         on_update=print_workflow_update,
     )
 
-    if state.status == "candidate_validation_passed":
+    if state.status == "human_review_required":
         show_project_diff(original_files, state.candidate_files)
 
         if dry_run:
