@@ -17,7 +17,7 @@ from engine.project_files import (
 )
 from engine.retrieval import retrieve_project_context
 from engine.schemas import AgentState
-from workflow.graph import run_agent_workflow
+from workflow import run_agent_workflow
 
 load_dotenv()
 
