@@ -4,6 +4,8 @@ from engine.routes import find_removed_get_routes
 from engine.schemas import AgentState
 from engine.validation import check_code
 
+from langgraph.types import interrupt
+
 
 def generate_candidate(state: AgentState) -> dict:
     iteration = state.iteration + 1
@@ -106,4 +108,17 @@ def prepare_retry_or_fail(state: AgentState) -> dict:
 
 
 def request_human_review(state: AgentState) -> dict:
-    return {"status": "human_review_required"}
+    decision = interrupt(
+        {
+            "status": "human_review_required",
+            "iteration": state.iteration,
+        }
+    )
+
+    if decision not in {"approve", "reject"}:
+        raise ValueError(f"Unknown review decision: {decision}")
+
+    return {
+        "review_decision": decision,
+        "status": "approved" if decision == "approve" else "rejected",
+    }

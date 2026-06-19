@@ -1,3 +1,4 @@
+import pytest
 from engine.project_files import APP_FILE_PATH, TEST_FILE_PATH
 from engine.schemas import AgentState, ValidationResult
 from workflow import nodes
@@ -180,7 +181,53 @@ def test_prepare_failure_when_iteration_limit_is_reached():
     assert result == {"status": "failed"}
 
 
-def test_request_human_review_marks_state_as_waiting_for_human():
+def test_request_human_review_returns_approved_decision(monkeypatch):
+    interrupt_payload = {}
+
+    def fake_interrupt(payload):
+        interrupt_payload.update(payload)
+        return "approve"
+
+    monkeypatch.setattr(nodes, "interrupt", fake_interrupt)
+
+    result = nodes.request_human_review(
+        make_state(iteration=2)
+    )
+
+    assert interrupt_payload == {
+        "status": "human_review_required",
+        "iteration": 2,
+    }
+    assert result == {
+        "review_decision": "approve",
+        "status": "approved",
+    }
+
+
+def test_request_human_review_returns_rejected_decision(monkeypatch):
+    monkeypatch.setattr(
+        nodes,
+        "interrupt",
+        lambda payload: "reject",
+    )
+
     result = nodes.request_human_review(make_state())
 
-    assert result == {"status": "human_review_required"}
+    assert result == {
+        "review_decision": "reject",
+        "status": "rejected",
+    }
+
+
+def test_request_human_review_rejects_unknown_decision(monkeypatch):
+    monkeypatch.setattr(
+        nodes,
+        "interrupt",
+        lambda payload: "maybe",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Unknown review decision: maybe",
+    ):
+        nodes.request_human_review(make_state())
