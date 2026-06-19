@@ -1,4 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from typing import Literal
 
 
 class GeneratedFile(BaseModel):
@@ -60,4 +61,4 @@ class AgentState(BaseModel):
     agent_rules: str = ""
     final_error_phase: str = ""
     max_iterations: int = 3
-
+    review_decision: Literal["approve", "reject"] | None = None

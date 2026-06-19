@@ -77,3 +77,15 @@ def test_agent_state_workflow_fields_use_defaults():
 
     assert state.candidate_files == {}
     assert state.last_validation_result is None
+    assert state.review_decision is None
+
+
+def test_agent_state_stores_review_decision():
+    state = AgentState(
+        task="task",
+        original_files={},
+        current_files={},
+        review_decision="approve",
+    )
+
+    assert state.review_decision == "approve"

@@ -63,11 +63,15 @@ def test_run_agent_workflow_calls_on_update_for_successful_path(monkeypatch):
     )
 
     updates = []
+    reviewed_states = []
 
     result = graph.run_agent_workflow(
         make_state(),
         on_update=lambda node_name, update: updates.append(
             (node_name, update["status"])
+        ),
+        on_review=lambda state: (
+                reviewed_states.append(state) or "approve"
         ),
     )
 
@@ -77,10 +81,13 @@ def test_run_agent_workflow_calls_on_update_for_successful_path(monkeypatch):
         ("baseline_validation", "baseline_validation_passed"),
         ("candidate_validation", "candidate_validation_passed"),
         ("request_human_review", "human_review_required"),
+        ("request_human_review", "approved"),
     ]
-    assert result.status == "human_review_required"
-    assert result.iteration == 1
-    assert result.candidate_files == candidate_files
+    assert result.status == "approved"
+    assert result.review_decision == "approve"
+    assert len(reviewed_states) == 1
+    assert reviewed_states[0].status == "human_review_required"
+    assert reviewed_states[0].candidate_files == candidate_files
 
 
 def test_run_agent_workflow_streams_retry_path(monkeypatch):
@@ -167,7 +174,9 @@ def test_run_agent_workflow_streams_retry_path(monkeypatch):
     assert result.errors == ["test failed"]
 
 
-def test_run_agent_workflow_returns_failed_state_after_streaming_retries(monkeypatch):
+def test_run_agent_workflow_returns_failed_state_after_streaming_retries(
+    monkeypatch,
+):
     def fail_generation(state):
         return {
             "iteration": state.iteration + 1,

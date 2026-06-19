@@ -54,6 +54,17 @@ def show_project_diff(old_files: dict[str, str], new_files: dict[str, str]):
         show_diff(path, old_code, new_files[path])
 
 
+def review_candidate(state: AgentState, dry_run: bool) -> str:
+    show_project_diff(state.original_files, state.candidate_files)
+
+    if dry_run:
+        return "reject"
+
+    answer = input("\nApply changes? [y/N]: ").strip().lower()
+
+    return "approve" if answer == "y" else "reject"
+
+
 def print_workflow_update(node_name: str, update: dict):
     iteration = update.get("iteration")
     status = update.get("status", "completed")
@@ -107,30 +118,41 @@ def run_agent(task, dry_run=False):
     state = run_agent_workflow(
         state,
         on_update=print_workflow_update,
+        on_review=lambda review_state: review_candidate(
+            review_state,
+            dry_run,
+        ),
     )
 
-    if state.status == "human_review_required":
-        show_project_diff(original_files, state.candidate_files)
+    if dry_run and state.status == "rejected":
+        state.status = "dry_run_completed"
+        print("DRY RUN: changes were not applied")
+        print_success_summary(
+            state,
+            dry_run,
+            "dry-run completed",
+        )
+        return
 
-        if dry_run:
-            state.status = "dry_run_completed"
-            print("DRY RUN: changes were not applied")
-            print_success_summary(state, dry_run, "dry-run completed")
-            return
+    if state.status == "rejected":
+        print("Changes rejected")
+        print_success_summary(
+            state,
+            dry_run,
+            "rejected",
+        )
+        return
 
-        answer = input("\nApply changes? [y/N]: ").strip().lower()
-
-        if answer != "y":
-            state.status = "rejected"
-            print("Changes rejected")
-            print_success_summary(state, dry_run, "rejected")
-            return
-
+    if state.status == "approved":
         write_project_files(state.candidate_files)
         state.status = "applied"
 
         print("SUCCESS: Code updated")
-        print_success_summary(state, dry_run, "applied")
+        print_success_summary(
+            state,
+            dry_run,
+            "applied",
+        )
         return
 
     print("\nFAILED AFTER MAX ITERATIONS")
