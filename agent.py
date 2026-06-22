@@ -58,7 +58,7 @@ def review_candidate(state: AgentState, dry_run: bool) -> str:
     show_project_diff(state.original_files, state.candidate_files)
 
     if dry_run:
-        return "reject"
+        return "dry_run"
 
     answer = input("\nApply changes? [y/N]: ").strip().lower()
 
@@ -124,8 +124,7 @@ def run_agent(task, dry_run=False):
         ),
     )
 
-    if dry_run and state.status == "rejected":
-        state.status = "dry_run_completed"
+    if state.status == "dry_run_completed":
         print("DRY RUN: changes were not applied")
         print_success_summary(
             state,
