@@ -115,10 +115,16 @@ def request_human_review(state: AgentState) -> dict:
         }
     )
 
-    if decision not in {"approve", "reject"}:
+    statuses = {
+        "approve": "approved",
+        "reject": "rejected",
+        "dry_run": "dry_run_completed",
+    }
+
+    if decision not in statuses:
         raise ValueError(f"Unknown review decision: {decision}")
 
     return {
         "review_decision": decision,
-        "status": "approved" if decision == "approve" else "rejected",
+        "status": statuses[decision],
     }

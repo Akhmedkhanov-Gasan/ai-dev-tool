@@ -231,3 +231,18 @@ def test_request_human_review_rejects_unknown_decision(monkeypatch):
         match="Unknown review decision: maybe",
     ):
         nodes.request_human_review(make_state())
+
+
+def test_request_human_review_returns_dry_run_decision(monkeypatch):
+    monkeypatch.setattr(
+        nodes,
+        "interrupt",
+        lambda payload: "dry_run",
+    )
+
+    result = nodes.request_human_review(make_state())
+
+    assert result == {
+        "review_decision": "dry_run",
+        "status": "dry_run_completed",
+    }

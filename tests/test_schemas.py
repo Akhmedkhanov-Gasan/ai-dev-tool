@@ -80,12 +80,26 @@ def test_agent_state_workflow_fields_use_defaults():
     assert state.review_decision is None
 
 
-def test_agent_state_stores_review_decision():
+@pytest.mark.parametrize(
+    "decision",
+    ["approve", "reject", "dry_run"],
+)
+def test_agent_state_stores_review_decision(decision):
     state = AgentState(
         task="task",
         original_files={},
         current_files={},
-        review_decision="approve",
+        review_decision=decision,
     )
 
-    assert state.review_decision == "approve"
+    assert state.review_decision == decision
+
+
+def test_agent_state_rejects_unknown_review_decision():
+    with pytest.raises(ValueError, match="review_decision"):
+        AgentState(
+            task="task",
+            original_files={},
+            current_files={},
+            review_decision="maybe",
+        )

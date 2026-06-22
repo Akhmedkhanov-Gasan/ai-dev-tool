@@ -5,6 +5,7 @@ from uuid import uuid4
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 from engine.schemas import AgentState
 from workflow.nodes import (
@@ -84,7 +85,15 @@ def build_agent_graph():
 
     graph.add_edge("request_human_review", END)
 
-    return graph.compile(checkpointer=InMemorySaver())
+    serializer = JsonPlusSerializer(
+        allowed_msgpack_modules=[
+            ("engine.schemas", "ValidationResult"),
+        ]
+    )
+
+    checkpointer = InMemorySaver(serde=serializer)
+
+    return graph.compile(checkpointer=checkpointer)
 
 
 def run_agent_workflow(
