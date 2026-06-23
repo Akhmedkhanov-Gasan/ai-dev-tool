@@ -18,6 +18,7 @@ from engine.project_files import (
 from engine.retrieval import retrieve_project_context
 from engine.schemas import AgentState
 from workflow import run_agent_workflow
+from workflow.result import get_workflow_outcome
 
 load_dotenv()
 
@@ -124,7 +125,9 @@ def run_agent(task, dry_run=False):
         ),
     )
 
-    if state.status == "dry_run_completed":
+    outcome = get_workflow_outcome(state)
+
+    if outcome == "dry_run":
         print("DRY RUN: changes were not applied")
         print_success_summary(
             state,
@@ -133,7 +136,7 @@ def run_agent(task, dry_run=False):
         )
         return
 
-    if state.status == "rejected":
+    if outcome == "rejected":
         print("Changes rejected")
         print_success_summary(
             state,
@@ -142,7 +145,7 @@ def run_agent(task, dry_run=False):
         )
         return
 
-    if state.status == "approved":
+    if outcome == "approved":
         write_project_files(state.candidate_files)
         state.status = "applied"
 
@@ -154,8 +157,8 @@ def run_agent(task, dry_run=False):
         )
         return
 
-    print("\nFAILED AFTER MAX ITERATIONS")
-    print("Restoring backup")
+    print("\nFAILED: unexpected workflow result")
+    print(f"Status: {state.status}")
 
     if state.errors:
         print("\nLast error:")
