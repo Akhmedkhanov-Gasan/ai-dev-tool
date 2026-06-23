@@ -128,3 +128,23 @@ def request_human_review(state: AgentState) -> dict:
         "review_decision": decision,
         "status": statuses[decision],
     }
+
+
+def finalize_review(state: AgentState) -> dict:
+    if state.review_decision == "approve":
+        return {"status": "ready_to_apply"}
+
+    if state.review_decision == "dry_run":
+        return {"status": "dry_run_completed"}
+
+    if state.review_decision == "reject":
+        return {"status": "rejected"}
+
+    return {
+        "status": "failed",
+        "final_error_phase": "review finalization",
+        "errors": [
+            *state.errors,
+            f"Unknown review decision: {state.review_decision}",
+        ],
+    }

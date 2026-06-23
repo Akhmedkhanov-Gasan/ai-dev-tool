@@ -16,7 +16,7 @@ def make_state(status: str) -> AgentState:
 @pytest.mark.parametrize(
     ("status", "expected"),
     [
-        ("approved", "approved"),
+        ("ready_to_apply", "approved"),
         ("dry_run_completed", "dry_run"),
         ("rejected", "rejected"),
         ("failed", "failed"),
