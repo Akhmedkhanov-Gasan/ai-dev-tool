@@ -12,7 +12,7 @@ WorkflowOutcome = Literal[
 
 
 def get_workflow_outcome(state: AgentState) -> WorkflowOutcome:
-    if state.status == "approved":
+    if state.status == "ready_to_apply":
         return "approved"
 
     if state.status == "dry_run_completed":

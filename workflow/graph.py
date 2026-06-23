@@ -11,6 +11,7 @@ from engine.schemas import AgentState
 from workflow.nodes import (
     baseline_validation,
     candidate_validation,
+    finalize_review,
     generate_candidate,
     prepare_retry_or_fail,
     request_human_review,
@@ -74,6 +75,7 @@ def build_agent_graph():
     graph.add_node("candidate_validation", candidate_validation)
     graph.add_node("prepare_retry_or_fail", prepare_retry_or_fail)
     graph.add_node("request_human_review", request_human_review)
+    graph.add_node("finalize_review", finalize_review)
 
     graph.add_edge(START, "generate_candidate")
 
@@ -83,7 +85,8 @@ def build_agent_graph():
     graph.add_conditional_edges("candidate_validation", route_after_candidate)
     graph.add_conditional_edges("prepare_retry_or_fail", route_after_retry)
 
-    graph.add_edge("request_human_review", END)
+    graph.add_edge("request_human_review", "finalize_review")
+    graph.add_edge("finalize_review", END)
 
     serializer = JsonPlusSerializer(
         allowed_msgpack_modules=[

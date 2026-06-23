@@ -82,8 +82,9 @@ def test_run_agent_workflow_calls_on_update_for_successful_path(monkeypatch):
         ("candidate_validation", "candidate_validation_passed"),
         ("request_human_review", "human_review_required"),
         ("request_human_review", "approved"),
+        ("finalize_review", "ready_to_apply"),
     ]
-    assert result.status == "approved"
+    assert result.status == "ready_to_apply"
     assert result.review_decision == "approve"
     assert len(reviewed_states) == 1
     assert reviewed_states[0].status == "human_review_required"
