@@ -103,3 +103,24 @@ def test_agent_state_rejects_unknown_review_decision():
             current_files={},
             review_decision="maybe",
         )
+
+
+def test_agent_state_pending_action_is_empty_by_default():
+    state = AgentState(
+        task="task",
+        original_files={},
+        current_files={},
+    )
+
+    assert state.pending_action is None
+
+
+def test_agent_state_stores_pending_action():
+    state = AgentState(
+        task="task",
+        original_files={},
+        current_files={},
+        pending_action="apply_changes",
+    )
+
+    assert state.pending_action == "apply_changes"

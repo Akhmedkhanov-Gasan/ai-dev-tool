@@ -150,6 +150,7 @@ def test_workflow_stops_after_max_generation_failures(monkeypatch):
     )
 
     assert result.status == "failed"
+    assert result.pending_action == "restore_backup"
     assert result.iteration == 2
     assert result.final_error_phase == "code generation"
     assert result.errors == [

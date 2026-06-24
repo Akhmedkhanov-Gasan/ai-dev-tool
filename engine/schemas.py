@@ -62,3 +62,9 @@ class AgentState(BaseModel):
     final_error_phase: str = ""
     max_iterations: int = 3
     review_decision: Literal["approve", "reject", "dry_run"] | None = None
+    pending_action: Literal[
+                        "apply_changes",
+                        "dry_run",
+                        "reject",
+                        "restore_backup",
+                    ] | None = None

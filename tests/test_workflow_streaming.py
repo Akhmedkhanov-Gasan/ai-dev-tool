@@ -85,6 +85,7 @@ def test_run_agent_workflow_calls_on_update_for_successful_path(monkeypatch):
         ("finalize_review", "ready_to_apply"),
     ]
     assert result.status == "ready_to_apply"
+    assert result.pending_action == "apply_changes"
     assert result.review_decision == "approve"
     assert len(reviewed_states) == 1
     assert reviewed_states[0].status == "human_review_required"
@@ -204,6 +205,7 @@ def test_run_agent_workflow_returns_failed_state_after_streaming_retries(
         ("prepare_retry_or_fail", "failed"),
     ]
     assert result.status == "failed"
+    assert result.pending_action == "restore_backup"
     assert result.iteration == 2
     assert result.final_error_phase == "code generation"
     assert result.errors == [
