@@ -178,7 +178,10 @@ def test_prepare_failure_when_iteration_limit_is_reached():
         make_state(iteration=3, max_iterations=3)
     )
 
-    assert result == {"status": "failed"}
+    assert result == {
+        "status": "failed",
+        "pending_action": "restore_backup",
+    }
 
 
 def test_request_human_review_returns_approved_decision(monkeypatch):
@@ -245,4 +248,56 @@ def test_request_human_review_returns_dry_run_decision(monkeypatch):
     assert result == {
         "review_decision": "dry_run",
         "status": "dry_run_completed",
+    }
+
+
+def test_finalize_review_prepares_apply_action():
+    result = nodes.finalize_review(
+        make_state(review_decision="approve")
+    )
+
+    assert result == {
+        "status": "ready_to_apply",
+        "pending_action": "apply_changes",
+    }
+
+
+def test_finalize_review_prepares_dry_run_action():
+    result = nodes.finalize_review(
+        make_state(review_decision="dry_run")
+    )
+
+    assert result == {
+        "status": "dry_run_completed",
+        "pending_action": "dry_run",
+    }
+
+
+def test_finalize_review_prepares_reject_action():
+    result = nodes.finalize_review(
+        make_state(review_decision="reject")
+    )
+
+    assert result == {
+        "status": "rejected",
+        "pending_action": "reject",
+    }
+
+
+def test_finalize_review_prepares_restore_action_for_unknown_decision():
+    result = nodes.finalize_review(
+        make_state(
+            review_decision=None,
+            errors=["old error"],
+        )
+    )
+
+    assert result == {
+        "status": "failed",
+        "pending_action": "restore_backup",
+        "final_error_phase": "review finalization",
+        "errors": [
+            "old error",
+            "Unknown review decision: None",
+        ],
     }

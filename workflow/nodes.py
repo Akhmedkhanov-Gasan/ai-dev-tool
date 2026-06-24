@@ -102,7 +102,10 @@ def candidate_validation(state: AgentState) -> dict:
 
 def prepare_retry_or_fail(state: AgentState) -> dict:
     if state.iteration >= state.max_iterations:
-        return {"status": "failed"}
+        return {
+            "status": "failed",
+            "pending_action": "restore_backup",
+        }
 
     return {"status": "retrying"}
 
@@ -132,16 +135,26 @@ def request_human_review(state: AgentState) -> dict:
 
 def finalize_review(state: AgentState) -> dict:
     if state.review_decision == "approve":
-        return {"status": "ready_to_apply"}
+        return {
+            "status": "ready_to_apply",
+            "pending_action": "apply_changes",
+        }
 
     if state.review_decision == "dry_run":
-        return {"status": "dry_run_completed"}
+        return {
+            "status": "dry_run_completed",
+            "pending_action": "dry_run",
+        }
 
     if state.review_decision == "reject":
-        return {"status": "rejected"}
+        return {
+            "status": "rejected",
+            "pending_action": "reject",
+        }
 
     return {
         "status": "failed",
+        "pending_action": "restore_backup",
         "final_error_phase": "review finalization",
         "errors": [
             *state.errors,
