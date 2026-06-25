@@ -3,6 +3,7 @@ import difflib
 import os
 import shutil
 import sys
+from uuid import uuid4
 
 from dotenv import load_dotenv
 
@@ -17,7 +18,11 @@ from engine.project_files import (
 )
 from engine.retrieval import retrieve_project_context
 from engine.schemas import AgentState
-from workflow import run_agent_workflow
+from workflow import (
+    resume_agent_workflow,
+    run_agent_workflow,
+    start_agent_workflow,
+)
 
 load_dotenv()
 
@@ -95,18 +100,10 @@ def restore_backups():
         shutil.copy(backup_path, source_path)
 
 
-def run_agent(task, dry_run=False):
-    print(f"MODEL: {get_model()}")
-    print(f"PROVIDER_URL: {get_provider_url()}")
-    print(f"DRY_RUN: {dry_run}")
-
-    for source_path, backup_path in BACKUP_PATHS.items():
-        os.makedirs(os.path.dirname(backup_path), exist_ok=True)
-        shutil.copy(source_path, backup_path)
-
+def build_initial_state(task: str) -> AgentState:
     original_files = read_project_files()
 
-    state = AgentState(
+    return AgentState(
         task=task,
         original_files=original_files,
         current_files=original_files,
@@ -115,15 +112,8 @@ def run_agent(task, dry_run=False):
         max_iterations=MAX_ITERATIONS,
     )
 
-    state = run_agent_workflow(
-        state,
-        on_update=print_workflow_update,
-        on_review=lambda review_state: review_candidate(
-            review_state,
-            dry_run,
-        ),
-    )
 
+def handle_workflow_action(state: AgentState, dry_run: bool):
     action = state.pending_action
 
     if action == "dry_run":
@@ -169,12 +159,101 @@ def run_agent(task, dry_run=False):
     print(f"Final error phase: {state.final_error_phase or 'unknown'}")
     print(f"Dry run: {dry_run}")
 
-    restore_backups()
+    if action == "restore_backup":
+        restore_backups()
+
+
+def run_agent(task, dry_run=False):
+    print(f"MODEL: {get_model()}")
+    print(f"PROVIDER_URL: {get_provider_url()}")
+    print(f"DRY_RUN: {dry_run}")
+    thread_id = str(uuid4())
+
+    for source_path, backup_path in BACKUP_PATHS.items():
+        os.makedirs(os.path.dirname(backup_path), exist_ok=True)
+        shutil.copy(source_path, backup_path)
+
+    state = build_initial_state(task)
+
+    state = run_agent_workflow(
+        state,
+        thread_id=thread_id,
+        on_update=print_workflow_update,
+        on_review=lambda review_state: review_candidate(
+            review_state,
+            dry_run,
+        ),
+    )
+
+    handle_workflow_action(state, dry_run)
+
+
+def run_review_only(task: str):
+    thread_id = str(uuid4())
+
+    print(f"MODEL: {get_model()}")
+    print(f"PROVIDER_URL: {get_provider_url()}")
+    print(f"THREAD_ID: {thread_id}")
+
+    state = build_initial_state(task)
+
+    try:
+        state = start_agent_workflow(
+            state,
+            thread_id=thread_id,
+            on_update=print_workflow_update,
+        )
+    except RuntimeError as e:
+        print(f"\nFAILED: {e}")
+        return
+
+    if state.status != "human_review_required":
+        print("\nWorkflow finished before human review")
+        print(f"Status: {state.status}")
+
+        if state.errors:
+            print("\nLast error:")
+            print(state.errors[-1])
+
+        if state.pending_action == "restore_backup":
+            print("\nNo review checkpoint was created.")
+
+        return
+
+    show_project_diff(state.original_files, state.candidate_files)
+
+    print("\nReview required")
+    print(f"Thread ID: {thread_id}")
+
+
+def run_resume_review(thread_id: str, decision: str):
+    print(f"RESUME_THREAD: {thread_id}")
+    print(f"DECISION: {decision}")
+
+    try:
+        state = resume_agent_workflow(
+            thread_id=thread_id,
+            decision=decision,
+            on_update=print_workflow_update,
+        )
+    except RuntimeError as e:
+        print(f"\nFAILED: {e}")
+        return
+
+    handle_workflow_action(
+        state,
+        dry_run=decision == "dry_run",
+    )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--review-only", action="store_true")
+    parser.add_argument("--resume-thread")
+    parser.add_argument("--approve", action="store_true")
+    parser.add_argument("--reject", action="store_true")
+    parser.add_argument("--dry-run-review", action="store_true")
     parser.add_argument("--limit", type=int, default=5)
     parser.add_argument("args", nargs="*", help="Agent task or index/search command")
     args = parser.parse_args()
@@ -203,6 +282,30 @@ if __name__ == "__main__":
 
         sys.exit(0)
 
+    if args.resume_thread:
+        decisions = [
+            args.approve,
+            args.reject,
+            args.dry_run_review,
+        ]
+
+        if sum(decisions) != 1:
+            print(
+                "Choose exactly one resume decision: "
+                "--approve, --reject, or --dry-run-review"
+            )
+            sys.exit(1)
+
+        if args.approve:
+            decision = "approve"
+        elif args.reject:
+            decision = "reject"
+        else:
+            decision = "dry_run"
+
+        run_resume_review(args.resume_thread, decision)
+        sys.exit(0)
+
     task = " ".join(args.args).strip()
 
     if not task:
@@ -210,5 +313,7 @@ if __name__ == "__main__":
 
     if not task:
         print("Task is empty")
+    elif args.review_only:
+        run_review_only(task)
     else:
         run_agent(task, dry_run=args.dry_run)

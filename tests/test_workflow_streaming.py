@@ -1,3 +1,5 @@
+from langgraph.checkpoint.memory import InMemorySaver
+
 from engine.project_files import APP_FILE_PATH, TEST_FILE_PATH
 from engine.schemas import AgentState, ValidationResult
 from workflow import graph
@@ -212,3 +214,91 @@ def test_run_agent_workflow_returns_failed_state_after_streaming_retries(
         "generation failed",
         "generation failed",
     ]
+
+
+def test_start_and_resume_agent_workflow(monkeypatch):
+    candidate_files = {
+        APP_FILE_PATH: "generated app",
+        TEST_FILE_PATH: "generated tests",
+    }
+    checkpointer = InMemorySaver()
+
+    def fake_generate(state):
+        return {
+            "iteration": state.iteration + 1,
+            "status": "candidate_generated",
+            "candidate_files": candidate_files,
+        }
+
+    monkeypatch.setattr(
+        graph,
+        "build_checkpointer",
+        lambda persistent=False: checkpointer,
+    )
+    monkeypatch.setattr(graph, "generate_candidate", fake_generate)
+    monkeypatch.setattr(
+        graph,
+        "route_guard",
+        lambda state: {"status": "route_protection_passed"},
+    )
+    monkeypatch.setattr(
+        graph,
+        "baseline_validation",
+        lambda state: {
+            "status": "baseline_validation_passed",
+            "last_validation_result": ValidationResult(
+                ok=True,
+                phase="passed",
+            ),
+        },
+    )
+    monkeypatch.setattr(
+        graph,
+        "candidate_validation",
+        lambda state: {
+            "status": "candidate_validation_passed",
+            "last_validation_result": ValidationResult(
+                ok=True,
+                phase="passed",
+            ),
+        },
+    )
+
+    thread_id = "test-thread"
+    start_updates = []
+    resume_updates = []
+
+    review_state = graph.start_agent_workflow(
+        make_state(),
+        thread_id=thread_id,
+        on_update=lambda node_name, update: start_updates.append(
+            (node_name, update["status"])
+        ),
+    )
+
+    result = graph.resume_agent_workflow(
+        thread_id=thread_id,
+        decision="dry_run",
+        on_update=lambda node_name, update: resume_updates.append(
+            (node_name, update["status"])
+        ),
+    )
+
+    assert start_updates == [
+        ("generate_candidate", "candidate_generated"),
+        ("route_guard", "route_protection_passed"),
+        ("baseline_validation", "baseline_validation_passed"),
+        ("candidate_validation", "candidate_validation_passed"),
+        ("request_human_review", "human_review_required"),
+    ]
+    assert review_state.status == "human_review_required"
+    assert review_state.candidate_files == candidate_files
+
+    assert resume_updates == [
+        ("request_human_review", "dry_run_completed"),
+        ("finalize_review", "dry_run_completed"),
+    ]
+    assert result.status == "dry_run_completed"
+    assert result.pending_action == "dry_run"
+    assert result.review_decision == "dry_run"
+    assert result.candidate_files == candidate_files
