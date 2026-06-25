@@ -2,12 +2,11 @@ from collections.abc import Callable
 from typing import Literal
 from uuid import uuid4
 
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
-from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 from engine.schemas import AgentState
+from workflow.checkpoints import build_checkpointer, build_thread_config
 from workflow.nodes import (
     baseline_validation,
     candidate_validation,
@@ -16,6 +15,11 @@ from workflow.nodes import (
     prepare_retry_or_fail,
     request_human_review,
     route_guard,
+)
+from workflow.reviews import (
+    delete_review_state,
+    load_review_state,
+    save_review_state,
 )
 
 ReviewHandler = Callable[[AgentState], str]
@@ -88,30 +92,18 @@ def build_agent_graph():
     graph.add_edge("request_human_review", "finalize_review")
     graph.add_edge("finalize_review", END)
 
-    serializer = JsonPlusSerializer(
-        allowed_msgpack_modules=[
-            ("engine.schemas", "ValidationResult"),
-        ]
-    )
-
-    checkpointer = InMemorySaver(serde=serializer)
-
-    return graph.compile(checkpointer=checkpointer)
+    return graph.compile(checkpointer=build_checkpointer())
 
 
 def run_agent_workflow(
     state: AgentState,
+    thread_id: str | None = None,
     on_update: Callable[[str, dict], None] | None = None,
     on_review: ReviewHandler | None = None,
 ) -> AgentState:
     graph = build_agent_graph()
     current_state = state.model_dump()
-
-    config = {
-        "configurable": {
-            "thread_id": str(uuid4()),
-        }
-    }
+    config = build_thread_config(thread_id or str(uuid4()))
 
     graph_input = current_state
 
@@ -133,7 +125,13 @@ def run_agent_workflow(
                     )
 
                 if on_review is None:
-                    return AgentState.model_validate(current_state)
+                    snapshot = graph.get_state(config)
+                    snapshot_state = AgentState.model_validate(
+                        snapshot.values
+                    )
+                    return snapshot_state.model_copy(
+                        update={"status": "human_review_required"}
+                    )
 
                 review_state = AgentState.model_validate(current_state)
                 decision = on_review(review_state)
@@ -152,3 +150,54 @@ def run_agent_workflow(
             break
 
     return AgentState.model_validate(current_state)
+
+
+def start_agent_workflow(
+    state: AgentState,
+    thread_id: str,
+    on_update: Callable[[str, dict], None] | None = None,
+) -> AgentState:
+    review_state = run_agent_workflow(
+        state,
+        thread_id=thread_id,
+        on_update=on_update,
+        on_review=None,
+    )
+
+    if review_state.status == "human_review_required":
+        save_review_state(thread_id, review_state)
+
+    return review_state
+
+
+def resume_agent_workflow(
+    thread_id: str,
+    decision: str,
+    on_update: Callable[[str, dict], None] | None = None,
+) -> AgentState:
+    if decision not in {"approve", "reject", "dry_run"}:
+        raise RuntimeError(f"Unknown review decision: {decision}")
+
+    state = load_review_state(thread_id)
+
+    status_by_decision = {
+        "approve": "approved",
+        "reject": "rejected",
+        "dry_run": "dry_run_completed",
+    }
+    review_update = {
+        "review_decision": decision,
+        "status": status_by_decision[decision],
+    }
+
+    if on_update is not None:
+        on_update("request_human_review", review_update)
+
+    state = state.model_copy(update=review_update)
+    finalize_update = finalize_review(state)
+
+    if on_update is not None:
+        on_update("finalize_review", finalize_update)
+
+    delete_review_state(thread_id)
+    return state.model_copy(update=finalize_update)
