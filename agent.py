@@ -23,7 +23,7 @@ from workflow import (
     run_agent_workflow,
     start_agent_workflow,
 )
-from workflow.reviews import list_review_states
+from workflow.reviews import clear_review_state, list_review_states
 
 load_dotenv()
 
@@ -263,11 +263,20 @@ def show_pending_reviews():
         )
 
 
+def clear_pending_review(thread_id: str):
+    if clear_review_state(thread_id):
+        print(f"Cleared review checkpoint: {thread_id}")
+        return
+
+    print(f"No review checkpoint found: {thread_id}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--review-only", action="store_true")
     parser.add_argument("--list-reviews", action="store_true")
+    parser.add_argument("--clear-review")
     parser.add_argument("--resume-thread")
     parser.add_argument("--approve", action="store_true")
     parser.add_argument("--reject", action="store_true")
@@ -302,6 +311,10 @@ if __name__ == "__main__":
 
     if args.list_reviews:
         show_pending_reviews()
+        sys.exit(0)
+
+    if args.clear_review:
+        clear_pending_review(args.clear_review)
         sys.exit(0)
 
     if args.resume_thread:
