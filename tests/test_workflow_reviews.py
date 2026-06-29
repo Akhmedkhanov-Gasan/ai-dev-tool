@@ -56,3 +56,23 @@ def test_list_review_states_returns_empty_list_when_directory_is_missing(
     monkeypatch.setattr(reviews, "REVIEW_DIR", tmp_path / "missing")
 
     assert reviews.list_review_states() == []
+
+
+def test_clear_review_state_deletes_existing_review(tmp_path, monkeypatch):
+    monkeypatch.setattr(reviews, "REVIEW_DIR", tmp_path)
+
+    reviews.save_review_state("thread-1", make_state())
+
+    assert reviews.clear_review_state("thread-1") is True
+
+    with pytest.raises(RuntimeError, match="No review checkpoint found"):
+        reviews.load_review_state("thread-1")
+
+
+def test_clear_review_state_returns_false_for_missing_review(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(reviews, "REVIEW_DIR", tmp_path)
+
+    assert reviews.clear_review_state("missing-thread") is False

@@ -56,3 +56,13 @@ def delete_review_state(thread_id: str):
 
     if path.exists():
         path.unlink()
+
+
+def clear_review_state(thread_id: str) -> bool:
+    path = build_review_path(thread_id)
+
+    if not path.exists():
+        return False
+
+    path.unlink()
+    return True
