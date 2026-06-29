@@ -30,6 +30,27 @@ def load_review_state(thread_id: str) -> AgentState:
     )
 
 
+def list_review_states() -> list[tuple[str, AgentState]]:
+    if not REVIEW_DIR.exists():
+        return []
+
+    reviews = []
+
+    for path in sorted(REVIEW_DIR.glob("*.json")):
+        try:
+            state = AgentState.model_validate_json(
+                path.read_text(encoding="utf-8")
+            )
+        except ValueError as e:
+            raise RuntimeError(
+                f"Invalid review checkpoint: {path}"
+            ) from e
+
+        reviews.append((path.stem, state))
+
+    return reviews
+
+
 def delete_review_state(thread_id: str):
     path = build_review_path(thread_id)
 

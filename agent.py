@@ -23,6 +23,7 @@ from workflow import (
     run_agent_workflow,
     start_agent_workflow,
 )
+from workflow.reviews import list_review_states
 
 load_dotenv()
 
@@ -246,10 +247,27 @@ def run_resume_review(thread_id: str, decision: str):
     )
 
 
+def show_pending_reviews():
+    reviews = list_review_states()
+
+    if not reviews:
+        print("No pending reviews")
+        return
+
+    print("Pending reviews:")
+
+    for thread_id, state in reviews:
+        print(
+            f"{thread_id} | iteration={state.iteration} "
+            f"| status={state.status} | task={state.task}"
+        )
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--review-only", action="store_true")
+    parser.add_argument("--list-reviews", action="store_true")
     parser.add_argument("--resume-thread")
     parser.add_argument("--approve", action="store_true")
     parser.add_argument("--reject", action="store_true")
@@ -280,6 +298,10 @@ if __name__ == "__main__":
             print(f"\n--- {result['path']}#{result['chunk_index']} ---")
             print(result["snippet"])
 
+        sys.exit(0)
+
+    if args.list_reviews:
+        show_pending_reviews()
         sys.exit(0)
 
     if args.resume_thread:
