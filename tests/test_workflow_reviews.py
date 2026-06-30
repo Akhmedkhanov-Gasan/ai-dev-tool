@@ -76,3 +76,32 @@ def test_clear_review_state_returns_false_for_missing_review(
     monkeypatch.setattr(reviews, "REVIEW_DIR", tmp_path)
 
     assert reviews.clear_review_state("missing-thread") is False
+
+
+def test_review_state_preserves_candidate_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(reviews, "REVIEW_DIR", tmp_path)
+
+    state = AgentState(
+        task="Add endpoint",
+        original_files={"demo_app/main.py": "old app"},
+        current_files={"demo_app/main.py": "old app"},
+        candidate_files={
+            "demo_app/main.py": "new app",
+            "demo_app/test_main.py": "new tests",
+        },
+        iteration=2,
+        status="human_review_required",
+        errors=["previous failure"],
+    )
+
+    reviews.save_review_state("thread-1", state)
+
+    loaded_state = reviews.load_review_state("thread-1")
+
+    assert loaded_state.task == "Add endpoint"
+    assert loaded_state.iteration == 2
+    assert loaded_state.candidate_files == {
+        "demo_app/main.py": "new app",
+        "demo_app/test_main.py": "new tests",
+    }
+    assert loaded_state.errors == ["previous failure"]
