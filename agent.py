@@ -23,7 +23,11 @@ from workflow import (
     run_agent_workflow,
     start_agent_workflow,
 )
-from workflow.reviews import clear_review_state, list_review_states
+from workflow.reviews import (
+    clear_review_state,
+    list_review_states,
+    load_review_state,
+)
 
 load_dotenv()
 
@@ -271,12 +275,36 @@ def clear_pending_review(thread_id: str):
     print(f"No review checkpoint found: {thread_id}")
 
 
+def show_review_details(thread_id: str):
+    try:
+        state = load_review_state(thread_id)
+    except RuntimeError as e:
+        print(f"FAILED: {e}")
+        return
+
+    print(f"Thread ID: {thread_id}")
+    print(f"Task: {state.task}")
+    print(f"Status: {state.status}")
+    print(f"Iteration: {state.iteration}")
+    print(f"Candidate files: {len(state.candidate_files)}")
+
+    for path in sorted(state.candidate_files):
+        print(f"- {path}")
+
+    if state.errors:
+        print(f"Errors: {len(state.errors)}")
+        print(state.errors[-1])
+    else:
+        print("Errors: none")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--review-only", action="store_true")
     parser.add_argument("--list-reviews", action="store_true")
     parser.add_argument("--clear-review")
+    parser.add_argument("--show-review")
     parser.add_argument("--resume-thread")
     parser.add_argument("--approve", action="store_true")
     parser.add_argument("--reject", action="store_true")
@@ -315,6 +343,10 @@ if __name__ == "__main__":
 
     if args.clear_review:
         clear_pending_review(args.clear_review)
+        sys.exit(0)
+
+    if args.show_review:
+        show_review_details(args.show_review)
         sys.exit(0)
 
     if args.resume_thread:
