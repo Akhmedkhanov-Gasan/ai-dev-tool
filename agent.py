@@ -298,6 +298,16 @@ def show_review_details(thread_id: str):
         print("Errors: none")
 
 
+def show_review_diff(thread_id: str):
+    try:
+        state = load_review_state(thread_id)
+    except RuntimeError as e:
+        print(f"FAILED: {e}")
+        return
+
+    show_project_diff(state.original_files, state.candidate_files)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
@@ -305,6 +315,7 @@ if __name__ == "__main__":
     parser.add_argument("--list-reviews", action="store_true")
     parser.add_argument("--clear-review")
     parser.add_argument("--show-review")
+    parser.add_argument("--diff-review")
     parser.add_argument("--resume-thread")
     parser.add_argument("--approve", action="store_true")
     parser.add_argument("--reject", action="store_true")
@@ -347,6 +358,10 @@ if __name__ == "__main__":
 
     if args.show_review:
         show_review_details(args.show_review)
+        sys.exit(0)
+
+    if args.diff_review:
+        show_review_diff(args.diff_review)
         sys.exit(0)
 
     if args.resume_thread:
