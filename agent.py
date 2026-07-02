@@ -267,6 +267,30 @@ def show_pending_reviews():
         )
 
 
+def show_review_summary():
+    reviews = list_review_states()
+
+    print(f"Pending reviews: {len(reviews)}")
+
+    if not reviews:
+        return
+
+    statuses: dict[str, int] = {}
+
+    for _, state in reviews:
+        statuses[state.status] = statuses.get(state.status, 0) + 1
+
+    print("Statuses:")
+
+    for status, count in sorted(statuses.items()):
+        print(f"- {status}: {count}")
+
+    print("Tasks:")
+
+    for _, state in reviews:
+        print(f"- {state.task}")
+
+
 def clear_pending_review(thread_id: str):
     if clear_review_state(thread_id):
         print(f"Cleared review checkpoint: {thread_id}")
@@ -313,6 +337,7 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--review-only", action="store_true")
     parser.add_argument("--list-reviews", action="store_true")
+    parser.add_argument("--review-summary", action="store_true")
     parser.add_argument("--clear-review")
     parser.add_argument("--show-review")
     parser.add_argument("--diff-review")
@@ -350,6 +375,10 @@ if __name__ == "__main__":
 
     if args.list_reviews:
         show_pending_reviews()
+        sys.exit(0)
+
+    if args.review_summary:
+        show_review_summary()
         sys.exit(0)
 
     if args.clear_review:
