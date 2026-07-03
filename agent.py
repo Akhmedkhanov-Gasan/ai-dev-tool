@@ -37,6 +37,7 @@ BACKUP_PATHS = {
     TEST_FILE_PATH: "demo_app/backups/test_main.py.bak",
 }
 MAX_ITERATIONS = 3
+DEFAULT_PENDING_REVIEW_WARNING_LIMIT = 5
 
 
 def read_agent_rules() -> str:
@@ -103,6 +104,27 @@ def print_success_summary(state: AgentState, dry_run: bool, status: str):
 def restore_backups():
     for source_path, backup_path in BACKUP_PATHS.items():
         shutil.copy(backup_path, source_path)
+
+
+def get_pending_review_warning_limit() -> int:
+    raw_limit = os.getenv("AI_AGENT_PENDING_REVIEW_WARNING_LIMIT")
+
+    if raw_limit is None:
+        return DEFAULT_PENDING_REVIEW_WARNING_LIMIT
+
+    try:
+        limit = int(raw_limit)
+    except ValueError as e:
+        raise RuntimeError(
+            "AI_AGENT_PENDING_REVIEW_WARNING_LIMIT must be an integer."
+        ) from e
+
+    if limit < 0:
+        raise RuntimeError(
+            "AI_AGENT_PENDING_REVIEW_WARNING_LIMIT must be 0 or greater."
+        )
+
+    return limit
 
 
 def build_initial_state(task: str) -> AgentState:
@@ -269,8 +291,15 @@ def show_pending_reviews():
 
 def show_review_summary():
     reviews = list_review_states()
+    warning_limit = get_pending_review_warning_limit()
 
     print(f"Pending reviews: {len(reviews)}")
+
+    if len(reviews) > warning_limit:
+        print(
+            "WARNING: pending review count is above limit: "
+            f"{warning_limit}"
+        )
 
     if not reviews:
         return
