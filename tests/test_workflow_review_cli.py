@@ -1,8 +1,7 @@
 import pytest
 
-import agent
 from engine.schemas import AgentState
-from workflow import reviews
+from workflow import review_cli, reviews
 
 
 def test_show_review_diff_prints_saved_candidate_diff(
@@ -22,7 +21,7 @@ def test_show_review_diff_prints_saved_candidate_diff(
 
     reviews.save_review_state("thread-1", state)
 
-    agent.show_review_diff("thread-1")
+    review_cli.show_review_diff("thread-1")
 
     output = capsys.readouterr().out
 
@@ -39,7 +38,7 @@ def test_show_review_summary_prints_empty_count(
     monkeypatch.setattr(reviews, "REVIEW_DIR", tmp_path / "missing")
     monkeypatch.delenv("AI_AGENT_PENDING_REVIEW_WARNING_LIMIT", raising=False)
 
-    agent.show_review_summary()
+    review_cli.show_review_summary()
 
     output = capsys.readouterr().out
 
@@ -73,7 +72,7 @@ def test_show_review_summary_prints_status_counts_and_tasks(
         ),
     )
 
-    agent.show_review_summary()
+    review_cli.show_review_summary()
 
     output = capsys.readouterr().out
 
@@ -110,7 +109,7 @@ def test_show_review_summary_warns_when_review_count_exceeds_limit(
         ),
     )
 
-    agent.show_review_summary()
+    review_cli.show_review_summary()
 
     output = capsys.readouterr().out
 
@@ -121,24 +120,24 @@ def test_show_review_summary_warns_when_review_count_exceeds_limit(
 def test_get_pending_review_warning_limit_uses_default(monkeypatch):
     monkeypatch.delenv("AI_AGENT_PENDING_REVIEW_WARNING_LIMIT", raising=False)
 
-    assert agent.get_pending_review_warning_limit() == 5
+    assert review_cli.get_pending_review_warning_limit() == 5
 
 
 def test_get_pending_review_warning_limit_reads_env(monkeypatch):
     monkeypatch.setenv("AI_AGENT_PENDING_REVIEW_WARNING_LIMIT", "3")
 
-    assert agent.get_pending_review_warning_limit() == 3
+    assert review_cli.get_pending_review_warning_limit() == 3
 
 
 def test_get_pending_review_warning_limit_rejects_invalid_env(monkeypatch):
     monkeypatch.setenv("AI_AGENT_PENDING_REVIEW_WARNING_LIMIT", "many")
 
     with pytest.raises(RuntimeError, match="must be an integer"):
-        agent.get_pending_review_warning_limit()
+        review_cli.get_pending_review_warning_limit()
 
 
 def test_get_pending_review_warning_limit_rejects_negative_env(monkeypatch):
     monkeypatch.setenv("AI_AGENT_PENDING_REVIEW_WARNING_LIMIT", "-1")
 
     with pytest.raises(RuntimeError, match="0 or greater"):
-        agent.get_pending_review_warning_limit()
+        review_cli.get_pending_review_warning_limit()
