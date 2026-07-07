@@ -235,7 +235,7 @@ def run_resume_review(thread_id: str, decision: str):
     )
 
 
-if __name__ == "__main__":
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--review-only", action="store_true")
@@ -250,51 +250,54 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run-review", action="store_true")
     parser.add_argument("--limit", type=int, default=5)
     parser.add_argument("args", nargs="*", help="Agent task or index/search command")
-    args = parser.parse_args()
 
+    return parser
+
+
+def handle_cli_args(args) -> int | None:
     if args.args and args.args[0] == "index":
         indexed_chunks = index_project()
         print(f"Indexed {indexed_chunks} project chunks")
-        sys.exit(0)
+        return 0
 
     if args.args and args.args[0] == "search":
         query = " ".join(args.args[1:]).strip()
 
         if not query:
             print("Search query is empty")
-            sys.exit(1)
+            return 1
 
         results = search_project(query, limit=args.limit)
 
         if not results:
             print("No results")
-            sys.exit(0)
+            return 0
 
         for result in results:
             print(f"\n--- {result['path']}#{result['chunk_index']} ---")
             print(result["snippet"])
 
-        sys.exit(0)
+        return 0
 
     if args.list_reviews:
         show_pending_reviews()
-        sys.exit(0)
+        return 0
 
     if args.review_summary:
         show_review_summary()
-        sys.exit(0)
+        return 0
 
     if args.clear_review:
         clear_pending_review(args.clear_review)
-        sys.exit(0)
+        return 0
 
     if args.show_review:
         show_review_details(args.show_review)
-        sys.exit(0)
+        return 0
 
     if args.diff_review:
         show_review_diff(args.diff_review)
-        sys.exit(0)
+        return 0
 
     if args.resume_thread:
         decisions = [
@@ -308,7 +311,7 @@ if __name__ == "__main__":
                 "Choose exactly one resume decision: "
                 "--approve, --reject, or --dry-run-review"
             )
-            sys.exit(1)
+            return 1
 
         if args.approve:
             decision = "approve"
@@ -318,8 +321,12 @@ if __name__ == "__main__":
             decision = "dry_run"
 
         run_resume_review(args.resume_thread, decision)
-        sys.exit(0)
+        return 0
 
+    return None
+
+
+def run_task_from_args(args):
     task = " ".join(args.args).strip()
 
     if not task:
@@ -331,3 +338,14 @@ if __name__ == "__main__":
         run_review_only(task)
     else:
         run_agent(task, dry_run=args.dry_run)
+
+
+if __name__ == "__main__":
+    parser = build_parser()
+    args = parser.parse_args()
+    exit_code = handle_cli_args(args)
+
+    if exit_code is None:
+        run_task_from_args(args)
+    else:
+        sys.exit(exit_code)
