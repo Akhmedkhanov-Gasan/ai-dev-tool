@@ -1,8 +1,9 @@
 import agent
+from cli.parser import build_parser
 
 
 def test_handle_cli_args_dispatches_review_summary(monkeypatch):
-    parser = agent.build_parser()
+    parser = build_parser()
     args = parser.parse_args(["--review-summary"])
     called = {}
 
@@ -20,14 +21,14 @@ def test_handle_cli_args_dispatches_review_summary(monkeypatch):
 
 
 def test_handle_cli_args_leaves_agent_task_unhandled():
-    parser = agent.build_parser()
+    parser = build_parser()
     args = parser.parse_args(["Add endpoint"])
 
     assert agent.handle_cli_args(args) is None
 
 
 def test_handle_cli_args_returns_error_for_invalid_resume_decision(capsys):
-    parser = agent.build_parser()
+    parser = build_parser()
     args = parser.parse_args(["--resume-thread", "thread-1"])
 
     assert agent.handle_cli_args(args) == 1
@@ -38,7 +39,7 @@ def test_handle_cli_args_returns_error_for_invalid_resume_decision(capsys):
 
 
 def test_run_task_from_args_runs_review_only(monkeypatch):
-    parser = agent.build_parser()
+    parser = build_parser()
     args = parser.parse_args(["--review-only", "Add endpoint"])
     called = {}
 
