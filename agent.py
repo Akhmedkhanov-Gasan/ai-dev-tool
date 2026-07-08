@@ -1,4 +1,3 @@
-import argparse
 import os
 import shutil
 import sys
@@ -6,6 +5,7 @@ from uuid import uuid4
 
 from dotenv import load_dotenv
 
+from cli.parser import build_parser
 from engine.index import index_project, search_project
 from engine.llm import get_model, get_provider_url
 from engine.project_files import (
@@ -233,25 +233,6 @@ def run_resume_review(thread_id: str, decision: str):
         state,
         dry_run=decision == "dry_run",
     )
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--review-only", action="store_true")
-    parser.add_argument("--list-reviews", action="store_true")
-    parser.add_argument("--review-summary", action="store_true")
-    parser.add_argument("--clear-review")
-    parser.add_argument("--show-review")
-    parser.add_argument("--diff-review")
-    parser.add_argument("--resume-thread")
-    parser.add_argument("--approve", action="store_true")
-    parser.add_argument("--reject", action="store_true")
-    parser.add_argument("--dry-run-review", action="store_true")
-    parser.add_argument("--limit", type=int, default=5)
-    parser.add_argument("args", nargs="*", help="Agent task or index/search command")
-
-    return parser
 
 
 def handle_cli_args(args) -> int | None:
