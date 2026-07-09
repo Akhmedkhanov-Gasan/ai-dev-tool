@@ -5,8 +5,12 @@ from uuid import uuid4
 
 from dotenv import load_dotenv
 
+from cli.commands import (
+    AgentCommandHandlers,
+    handle_cli_args,
+    run_task_from_args,
+)
 from cli.parser import build_parser
-from engine.index import index_project, search_project
 from engine.llm import get_model, get_provider_url
 from engine.project_files import (
     APP_FILE_PATH,
@@ -23,12 +27,7 @@ from workflow import (
     start_agent_workflow,
 )
 from workflow.review_cli import (
-    clear_pending_review,
-    show_pending_reviews,
     show_project_diff,
-    show_review_details,
-    show_review_diff,
-    show_review_summary,
 )
 
 load_dotenv()
@@ -235,98 +234,17 @@ def run_resume_review(thread_id: str, decision: str):
     )
 
 
-def handle_cli_args(args) -> int | None:
-    if args.args and args.args[0] == "index":
-        indexed_chunks = index_project()
-        print(f"Indexed {indexed_chunks} project chunks")
-        return 0
-
-    if args.args and args.args[0] == "search":
-        query = " ".join(args.args[1:]).strip()
-
-        if not query:
-            print("Search query is empty")
-            return 1
-
-        results = search_project(query, limit=args.limit)
-
-        if not results:
-            print("No results")
-            return 0
-
-        for result in results:
-            print(f"\n--- {result['path']}#{result['chunk_index']} ---")
-            print(result["snippet"])
-
-        return 0
-
-    if args.list_reviews:
-        show_pending_reviews()
-        return 0
-
-    if args.review_summary:
-        show_review_summary()
-        return 0
-
-    if args.clear_review:
-        clear_pending_review(args.clear_review)
-        return 0
-
-    if args.show_review:
-        show_review_details(args.show_review)
-        return 0
-
-    if args.diff_review:
-        show_review_diff(args.diff_review)
-        return 0
-
-    if args.resume_thread:
-        decisions = [
-            args.approve,
-            args.reject,
-            args.dry_run_review,
-        ]
-
-        if sum(decisions) != 1:
-            print(
-                "Choose exactly one resume decision: "
-                "--approve, --reject, or --dry-run-review"
-            )
-            return 1
-
-        if args.approve:
-            decision = "approve"
-        elif args.reject:
-            decision = "reject"
-        else:
-            decision = "dry_run"
-
-        run_resume_review(args.resume_thread, decision)
-        return 0
-
-    return None
-
-
-def run_task_from_args(args):
-    task = " ".join(args.args).strip()
-
-    if not task:
-        task = input("Task: ").strip()
-
-    if not task:
-        print("Task is empty")
-    elif args.review_only:
-        run_review_only(task)
-    else:
-        run_agent(task, dry_run=args.dry_run)
-
-
 if __name__ == "__main__":
     parser = build_parser()
     args = parser.parse_args()
-    exit_code = handle_cli_args(args)
+    handlers = AgentCommandHandlers(
+        run_agent=run_agent,
+        run_review_only=run_review_only,
+        run_resume_review=run_resume_review,
+    )
+    exit_code = handle_cli_args(args, handlers)
 
     if exit_code is None:
-        run_task_from_args(args)
+        run_task_from_args(args, handlers)
     else:
         sys.exit(exit_code)
