@@ -3,6 +3,7 @@ from engine.project_files import APP_FILE_PATH, TEST_FILE_PATH
 from engine.routes import find_removed_get_routes
 from engine.schemas import AgentState
 from engine.validation import check_code
+from tools.validation_tools import run_validation_tool
 
 from langgraph.types import interrupt
 
@@ -61,7 +62,8 @@ def baseline_validation(state: AgentState) -> dict:
         TEST_FILE_PATH: state.original_files[TEST_FILE_PATH],
     }
 
-    result = check_code(baseline_files, state.original_files)
+    tool_result = run_validation_tool(baseline_files, state.original_files)
+    result = tool_result.data["validation_result"]
 
     if not result.ok:
         error_message = (
