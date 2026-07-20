@@ -1,6 +1,7 @@
 import pytest
 from engine.project_files import APP_FILE_PATH, TEST_FILE_PATH
 from engine.schemas import AgentState, ValidationResult
+from tools.result import ToolResult
 from workflow import nodes
 
 
@@ -92,12 +93,21 @@ def test_route_guard_records_removed_routes(monkeypatch):
 def test_baseline_validation_uses_original_tests(monkeypatch):
     captured = {}
 
-    def fake_check_code(files, original_files):
+    def fake_run_validation_tool(files, original_files):
         captured["files"] = files
         captured["original_files"] = original_files
-        return ValidationResult(ok=True, phase="passed")
+        return ToolResult(
+            ok=True,
+            name="run_validation",
+            data={
+                "validation_result": ValidationResult(
+                    ok=True,
+                    phase="passed",
+                ),
+            },
+        )
 
-    monkeypatch.setattr(nodes, "check_code", fake_check_code)
+    monkeypatch.setattr(nodes, "run_validation_tool", fake_run_validation_tool)
 
     state = make_state()
     result = nodes.baseline_validation(state)
@@ -114,11 +124,17 @@ def test_baseline_validation_uses_original_tests(monkeypatch):
 def test_baseline_validation_records_failure(monkeypatch):
     monkeypatch.setattr(
         nodes,
-        "check_code",
-        lambda files, original_files: ValidationResult(
+        "run_validation_tool",
+        lambda files, original_files: ToolResult(
             ok=False,
-            phase="pytest",
-            message="original test failed",
+            name="run_validation",
+            data={
+                "validation_result": ValidationResult(
+                    ok=False,
+                    phase="pytest",
+                    message="original test failed",
+                ),
+            },
         ),
     )
 
