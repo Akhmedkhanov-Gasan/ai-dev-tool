@@ -67,8 +67,12 @@ def test_generate_candidate_records_generation_error(monkeypatch):
 def test_route_guard_passes_when_routes_are_preserved(monkeypatch):
     monkeypatch.setattr(
         nodes,
-        "find_removed_get_routes",
-        lambda old_code, new_code: set(),
+        "inspect_removed_routes_tool",
+        lambda old_code, new_code: ToolResult(
+            ok=True,
+            name="inspect_removed_routes",
+            data={"removed_routes": set()},
+        ),
     )
 
     result = nodes.route_guard(make_state())
@@ -79,8 +83,12 @@ def test_route_guard_passes_when_routes_are_preserved(monkeypatch):
 def test_route_guard_records_removed_routes(monkeypatch):
     monkeypatch.setattr(
         nodes,
-        "find_removed_get_routes",
-        lambda old_code, new_code: {"/health"},
+        "inspect_removed_routes_tool",
+        lambda old_code, new_code: ToolResult(
+            ok=False,
+            name="inspect_removed_routes",
+            data={"removed_routes": {"/health"}},
+        ),
     )
 
     result = nodes.route_guard(make_state())
