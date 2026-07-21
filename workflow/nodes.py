@@ -1,8 +1,8 @@
 from engine.generation import generate_code
 from engine.project_files import APP_FILE_PATH, TEST_FILE_PATH
-from engine.routes import find_removed_get_routes
 from engine.schemas import AgentState
 from engine.validation import check_code
+from tools.route_tools import inspect_removed_routes_tool
 from tools.validation_tools import run_validation_tool
 
 from langgraph.types import interrupt
@@ -37,10 +37,11 @@ def generate_candidate(state: AgentState) -> dict:
 
 
 def route_guard(state: AgentState) -> dict:
-    removed_routes = find_removed_get_routes(
+    tool_result = inspect_removed_routes_tool(
         state.current_files[APP_FILE_PATH],
         state.candidate_files[APP_FILE_PATH],
     )
+    removed_routes = tool_result.data["removed_routes"]
 
     if removed_routes:
         error_message = (

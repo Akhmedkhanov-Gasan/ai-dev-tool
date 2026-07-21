@@ -2,6 +2,7 @@ import pytest
 
 from engine.schemas import ValidationResult
 from tools.result import ToolResult
+from tools import route_tools
 from tools import validation_tools
 
 
@@ -64,3 +65,38 @@ def test_run_validation_tool_wraps_failure(monkeypatch):
     assert result.name == "run_validation"
     assert result.message == "Validation failed during pytest"
     assert result.data["validation_result"] is validation_result
+
+
+def test_inspect_removed_routes_tool_wraps_success(monkeypatch):
+    def fake_find_removed_get_routes(old_code, new_code):
+        assert old_code == "old app"
+        assert new_code == "new app"
+        return set()
+
+    monkeypatch.setattr(
+        route_tools,
+        "find_removed_get_routes",
+        fake_find_removed_get_routes,
+    )
+
+    result = route_tools.inspect_removed_routes_tool("old app", "new app")
+
+    assert result.ok is True
+    assert result.name == "inspect_removed_routes"
+    assert result.message == "No removed GET routes found"
+    assert result.data["removed_routes"] == set()
+
+
+def test_inspect_removed_routes_tool_wraps_removed_routes(monkeypatch):
+    monkeypatch.setattr(
+        route_tools,
+        "find_removed_get_routes",
+        lambda old_code, new_code: {"/health"},
+    )
+
+    result = route_tools.inspect_removed_routes_tool("old app", "new app")
+
+    assert result.ok is False
+    assert result.name == "inspect_removed_routes"
+    assert result.message == "Removed GET routes found: ['/health']"
+    assert result.data["removed_routes"] == {"/health"}
