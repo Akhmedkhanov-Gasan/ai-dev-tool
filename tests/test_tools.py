@@ -2,6 +2,7 @@ import pytest
 
 from engine.schemas import ValidationResult
 from tools.result import ToolResult
+from tools import project_tools
 from tools import route_tools
 from tools import validation_tools
 
@@ -100,3 +101,23 @@ def test_inspect_removed_routes_tool_wraps_removed_routes(monkeypatch):
     assert result.name == "inspect_removed_routes"
     assert result.message == "Removed GET routes found: ['/health']"
     assert result.data["removed_routes"] == {"/health"}
+
+
+def test_read_project_files_tool_wraps_project_files(monkeypatch):
+    files = {
+        "demo_app/main.py": "app",
+        "demo_app/test_main.py": "tests",
+    }
+
+    monkeypatch.setattr(
+        project_tools,
+        "read_project_files",
+        lambda: files,
+    )
+
+    result = project_tools.read_project_files_tool()
+
+    assert result.ok is True
+    assert result.name == "read_project_files"
+    assert result.message == "Read 2 project files"
+    assert result.data["files"] is files
