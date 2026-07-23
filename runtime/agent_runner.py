@@ -9,11 +9,11 @@ from engine.project_files import (
     APP_FILE_PATH,
     TEST_FILE_PATH,
     read_file,
-    read_project_files,
     write_project_files,
 )
 from engine.retrieval import retrieve_project_context
 from engine.schemas import AgentState
+from tools.project_tools import read_project_files_tool
 from workflow import (
     resume_agent_workflow,
     run_agent_workflow,
@@ -80,7 +80,8 @@ def restore_backups():
 
 
 def build_initial_state(task: str) -> AgentState:
-    original_files = read_project_files()
+    tool_result = read_project_files_tool()
+    original_files = tool_result.data["files"]
 
     return AgentState(
         task=task,
