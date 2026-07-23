@@ -1,5 +1,41 @@
 from engine.schemas import AgentState
 from runtime import agent_runner
+from tools.result import ToolResult
+
+
+def test_build_initial_state_reads_files_through_tool(monkeypatch):
+    files = {
+        "demo_app/main.py": "app",
+        "demo_app/test_main.py": "tests",
+    }
+
+    monkeypatch.setattr(
+        agent_runner,
+        "read_project_files_tool",
+        lambda: ToolResult(
+            ok=True,
+            name="read_project_files",
+            data={"files": files},
+        ),
+    )
+    monkeypatch.setattr(
+        agent_runner,
+        "retrieve_project_context",
+        lambda task: "retrieved context",
+    )
+    monkeypatch.setattr(
+        agent_runner,
+        "read_agent_rules",
+        lambda: "rules",
+    )
+
+    state = agent_runner.build_initial_state("Add endpoint")
+
+    assert state.task == "Add endpoint"
+    assert state.original_files == files
+    assert state.current_files == files
+    assert state.retrieved_context == "retrieved context"
+    assert state.agent_rules == "rules"
 
 
 def test_run_review_only_prints_review_diff(monkeypatch, capsys):
