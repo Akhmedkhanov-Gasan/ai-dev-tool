@@ -121,3 +121,28 @@ def test_read_project_files_tool_wraps_project_files(monkeypatch):
     assert result.name == "read_project_files"
     assert result.message == "Read 2 project files"
     assert result.data["files"] is files
+
+
+def test_write_project_files_tool_wraps_project_files(monkeypatch):
+    files = {
+        "demo_app/main.py": "app",
+        "demo_app/test_main.py": "tests",
+    }
+    captured = {}
+
+    def fake_write_project_files(files_to_write):
+        captured["files"] = files_to_write
+
+    monkeypatch.setattr(
+        project_tools,
+        "write_project_files",
+        fake_write_project_files,
+    )
+
+    result = project_tools.write_project_files_tool(files)
+
+    assert captured["files"] is files
+    assert result.ok is True
+    assert result.name == "write_project_files"
+    assert result.message == "Wrote 2 project files"
+    assert result.data["files"] is files
